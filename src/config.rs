@@ -1,4 +1,4 @@
-use crate::cli::{Cli, OutputFormat};
+use crate::cli::{Cli, OutputFormat, MachineType};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -10,6 +10,7 @@ pub struct Config {
     pub output: OutputConfig,
     pub tests: TestConfig,
     pub thresholds: ThresholdConfig,
+    pub machine: Option<MachineConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +49,13 @@ pub struct ThresholdConfig {
     pub cpu_usage_max_percent: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MachineConfig {
+    pub machine_type: String,
+    pub auto_detect: bool,
+    pub hardware_features: Vec<String>,
+}
+
 impl Config {
     pub fn from_cli(cli: &Cli) -> Result<Self> {
         let mut config = if let Some(config_file) = &cli.config {
@@ -76,6 +84,20 @@ impl Config {
 
         if let Some(output_file) = &cli.output {
             config.output.file = Some(output_file.to_string_lossy().to_string());
+        }
+
+        // Handle machine configuration
+        if let Some(machine_type) = &cli.machine {
+            let machine_type_str = match machine_type {
+                MachineType::Imx93JaguarEink => "imx93-jaguar-eink".to_string(),
+                MachineType::Imx8mmJaguarSentai => "imx8mm-jaguar-sentai".to_string(),
+            };
+            
+            config.machine = Some(MachineConfig {
+                machine_type: machine_type_str,
+                auto_detect: false,
+                hardware_features: get_machine_features(machine_type),
+            });
         }
 
         Ok(config)
@@ -131,6 +153,31 @@ impl Default for Config {
                 memory_usage_max_mb: 512,
                 cpu_usage_max_percent: 80.0,
             },
+            machine: None,
         }
+    }
+}
+
+fn get_machine_features(machine_type: &MachineType) -> Vec<String> {
+    match machine_type {
+        MachineType::Imx93JaguarEink => vec![
+            "imx93".to_string(),
+            "edgelock-enclave".to_string(),
+            "caam".to_string(),
+            "secure-boot".to_string(),
+            "trustzone".to_string(),
+            "op-tee".to_string(),
+            "tf-a".to_string(),
+            "eink-display".to_string(),
+        ],
+        MachineType::Imx8mmJaguarSentai => vec![
+            "imx8mm".to_string(),
+            "caam".to_string(),
+            "secure-boot".to_string(),
+            "trustzone".to_string(),
+            "op-tee".to_string(),
+            "tf-a".to_string(),
+            "hab".to_string(),
+        ],
     }
 }
