@@ -85,6 +85,11 @@ impl<'a> MachineDetector<'a> {
             features.push("trustzone".to_string());
         }
 
+        // Check for PCF2131 RTC (specific to i.MX93 Jaguar E-Ink)
+        if self.check_pcf2131_rtc().await {
+            features.push("pcf2131-rtc".to_string());
+        }
+
         // Check for specific SoC types
         let cpu_info = self.get_cpu_info().await?;
         if cpu_info.contains("i.MX93") || cpu_info.contains("imx93") {
@@ -123,6 +128,31 @@ impl<'a> MachineDetector<'a> {
         false
     }
 
+    async fn check_pcf2131_rtc(&mut self) -> bool {
+        // Check for PCF2131 RTC in multiple ways
+        let checks = vec![
+            // Check for PCF2131 in I2C device tree
+            "find /sys/bus/i2c/devices -name '*pcf2131*' | head -1",
+            // Check for PCF2131 in device tree
+            "find /proc/device-tree -name '*pcf2131*' | head -1", 
+            // Check dmesg for PCF2131 messages
+            "dmesg | grep -i pcf2131 | head -1",
+            // Check for RTC device with PCF2131 driver
+            "cat /sys/class/rtc/rtc*/name 2>/dev/null | grep -i pcf2131",
+            // Check I2C bus for PCF2131 address (typically 0x53)
+            "i2cdetect -y 0 2>/dev/null | grep -E '53|UU' || i2cdetect -y 1 2>/dev/null | grep -E '53|UU'",
+        ];
+
+        for check in checks {
+            if let Ok(output) = self.ssh_client.execute_command(check).await {
+                if output.exit_code == 0 && !output.stdout.trim().is_empty() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     fn determine_machine_type(
         &self,
         _cpu_info: &str,
@@ -135,6 +165,10 @@ impl<'a> MachineDetector<'a> {
                 if board.to_lowercase().contains("jaguar") && board.to_lowercase().contains("eink") {
                     return Some(MachineType::Imx93JaguarEink);
                 }
+            }
+            // Additional check: PCF2131 RTC is specific to E-Ink variant
+            if features.contains(&"pcf2131-rtc".to_string()) {
+                return Some(MachineType::Imx93JaguarEink);
             }
             // Fallback to i.MX93 detection
             return Some(MachineType::Imx93JaguarEink);
@@ -186,11 +220,15 @@ fn is_test_compatible_with_machine(test_name: &str, machine_features: &[String])
         ("hardware_003", vec!["secure-boot"]), // Hardware Root of Trust
         ("hardware_004", vec!["caam"]), // Crypto Hardware Acceleration
         ("hardware_005", vec!["caam"]), // Hardware RNG
+        ("hardware_006", vec!["pcf2131-rtc"]), // PCF2131 RTC functionality - i.MX93 E-Ink only
         
         // Boot tests that may be SoC-specific
         ("boot_001", vec!["secure-boot"]), // Secure Boot Enabled
         ("boot_005", vec!["op-tee"]), // OP-TEE Signature Verification
         ("boot_006", vec!["tf-a"]), // TF-A Signature Verification
+        
+        // Runtime tests that might use RTC
+        ("runtime_009", vec!["pcf2131-rtc"]), // Time synchronization and RTC accuracy
         
         // i.MX93 specific tests
         ("hardware_001", vec!["imx93"]), // EdgeLock Enclave is i.MX93 specific
@@ -234,6 +272,7 @@ mod tests {
                 "edgelock-enclave".to_string(),
                 "trustzone".to_string(),
                 "op-tee".to_string(),
+                "pcf2131-rtc".to_string(),
             ],
         };
 
