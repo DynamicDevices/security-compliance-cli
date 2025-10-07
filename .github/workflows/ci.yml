@@ -60,6 +60,9 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: security-compliance-cli-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: security-compliance-cli-windows-x86_64
 
     steps:
     - name: Checkout code
@@ -100,7 +103,8 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact_name }}
-        path: target/${{ matrix.target }}/release/security-compliance-cli
+        path: |
+          target/${{ matrix.target }}/release/security-compliance-cli${{ matrix.os == 'windows-latest' && '.exe' || '' }}
         retention-days: 30
 
   functional-test:
