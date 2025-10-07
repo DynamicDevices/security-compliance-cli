@@ -69,7 +69,7 @@ impl SshKeyInstaller {
         // Generate Ed25519 key pair using ssh-key library for proper format
         let private_key = PrivateKey::random(&mut OsRng, ssh_key::Algorithm::Ed25519)
             .map_err(|e| Error::Config(format!("Failed to generate SSH key: {}", e)))?;
-        
+
         let public_key = private_key.public_key();
 
         // Create comment with expiration info
@@ -100,7 +100,7 @@ impl SshKeyInstaller {
         let public_key_openssh = public_key
             .to_openssh()
             .map_err(|e| Error::Config(format!("Failed to format public key: {}", e)))?;
-        
+
         let public_key_str = format!("{} {}", public_key_openssh.trim(), comment_with_expiry);
 
         // Format private key in OpenSSH format
@@ -522,7 +522,7 @@ impl SshKeyInstaller {
         // Parse the OpenSSH private key format using ssh-key library
         let private_key = PrivateKey::from_openssh(&private_key_content)
             .map_err(|e| Error::Config(format!("Failed to parse private key: {}", e)))?;
-        
+
         let public_key = private_key.public_key();
         let public_key_openssh = public_key
             .to_openssh()
