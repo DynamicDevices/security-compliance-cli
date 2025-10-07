@@ -8,6 +8,15 @@ pub enum Error {
     #[error("SSH authentication failed: {0}")]
     SshAuth(String),
 
+    #[error("Serial connection failed: {0}")]
+    SerialConnection(String),
+
+    #[error("Communication channel error: {0}")]
+    Communication(String),
+
+    #[error("Operation not supported: {0}")]
+    Unsupported(String),
+
     #[error("Command execution failed: {0}")]
     CommandExecution(String),
 
@@ -28,6 +37,9 @@ pub enum Error {
 
     #[error("SSH2 error: {0}")]
     Ssh2(#[from] ssh2::Error),
+
+    #[error("Anyhow error: {0}")]
+    Anyhow(#[from] anyhow::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

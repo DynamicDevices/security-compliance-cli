@@ -5,40 +5,78 @@
  */
 
 use crate::{
-    config::TargetConfig,
+    communication::{ChannelConfig, CommunicationChannel},
+    config::CommunicationConfig,
     error::{Error, Result},
-    ssh::SshClient,
+    serial_channel::SerialChannel,
+    ssh_channel::SshChannel,
 };
 use std::time::Duration;
 use tracing::{debug, info};
 
 pub struct Target {
-    ssh_client: SshClient,
-    config: TargetConfig,
+    channel: Box<dyn CommunicationChannel>,
+    config: CommunicationConfig,
 }
 
 impl Target {
-    pub fn new(config: TargetConfig) -> Result<Self> {
-        let ssh_client = SshClient::new(&config)?;
+    pub fn new(config: CommunicationConfig) -> Result<Self> {
+        let channel_config = config.to_channel_config()?;
+        let channel: Box<dyn CommunicationChannel> = match channel_config {
+            ChannelConfig::Ssh { .. } => {
+                Box::new(SshChannel::from_channel_config(ChannelConfig::Ssh {
+                    host: config.host.clone().unwrap_or_default(),
+                    port: config.port.unwrap_or(22),
+                    user: config.user.clone().unwrap_or_default(),
+                    password: config.password.clone().unwrap_or_default(),
+                    ssh_key_path: config.ssh_key_path.clone(),
+                    timeout: config.timeout as u32,
+                    ssh_multiplex: config.ssh_multiplex.unwrap_or(false),
+                })?)
+            }
+            ChannelConfig::Serial { .. } => {
+                Box::new(SerialChannel::from_channel_config(ChannelConfig::Serial {
+                    device: config.serial_device.clone().unwrap_or_default(),
+                    baud_rate: config.baud_rate.unwrap_or(115200),
+                    timeout: config.timeout as u32,
+                    login_prompt: config.serial_login_prompt.clone(),
+                    password_prompt: config.serial_password_prompt.clone(),
+                    shell_prompt: config.serial_shell_prompt.clone(),
+                    username: config.serial_username.clone(),
+                    password: config.serial_password.clone(),
+                })?)
+            }
+        };
 
-        Ok(Self { ssh_client, config })
+        Ok(Self { channel, config })
     }
 
     pub async fn connect(&mut self) -> Result<()> {
-        info!(
-            "Connecting to target {}:{}",
-            self.config.host, self.config.port
-        );
-        self.ssh_client.connect().await
+        info!("Connecting to target using {}", self.channel.description());
+        self.channel.connect().await
+    }
+
+    pub async fn disconnect(&mut self) -> Result<()> {
+        info!("Disconnecting from target");
+        self.channel.disconnect().await
     }
 
     pub fn get_password(&self) -> &str {
-        &self.config.password
+        match self.config.channel_type.as_str() {
+            "ssh" => self.config.password.as_deref().unwrap_or(""),
+            "serial" => self.config.serial_password.as_deref().unwrap_or(""),
+            _ => "",
+        }
     }
 
     pub async fn execute_command(&mut self, command: &str) -> Result<CommandResult> {
         debug!("Executing command: {}", command);
-        self.ssh_client.execute_command(command).await
+        let output = self.channel.execute_command(command).await?;
+        Ok(CommandResult {
+            stdout: output.stdout,
+            stderr: output.stderr,
+            exit_code: output.exit_code,
+        })
     }
 
     pub async fn execute_command_with_timeout(
@@ -47,19 +85,133 @@ impl Target {
         timeout: Duration,
     ) -> Result<CommandResult> {
         debug!("Executing command with timeout {:?}: {}", timeout, command);
-        self.ssh_client
+        let output = self
+            .channel
             .execute_command_with_timeout(command, timeout)
-            .await
+            .await?;
+        Ok(CommandResult {
+            stdout: output.stdout,
+            stderr: output.stderr,
+            exit_code: output.exit_code,
+        })
+    }
+
+    pub async fn upload_file(&mut self, local_path: &str, remote_path: &str) -> Result<()> {
+        info!("Uploading file: {} -> {}", local_path, remote_path);
+        self.channel.upload_file(local_path, remote_path).await
+    }
+
+    pub async fn download_file(&mut self, remote_path: &str, local_path: &str) -> Result<()> {
+        info!("Downloading file: {} -> {}", remote_path, local_path);
+        self.channel.download_file(remote_path, local_path).await
+    }
+
+    pub async fn is_connected(&self) -> bool {
+        self.channel.is_connected().await
+    }
+
+    pub fn get_communication_channel(&mut self) -> &mut dyn CommunicationChannel {
+        self.channel.as_mut()
+    }
+
+    // Legacy compatibility methods for existing tests
+    pub async fn get_kernel_version(&mut self) -> Result<String> {
+        let result = self.execute_command("uname -r").await?;
+        if result.exit_code == 0 {
+            Ok(result.stdout.trim().to_string())
+        } else {
+            Err(Error::CommandExecution(format!(
+                "Failed to get kernel version: {}",
+                result.stderr
+            )))
+        }
+    }
+
+    pub async fn get_uptime(&mut self) -> Result<String> {
+        let result = self.execute_command("uptime -p").await?;
+        if result.exit_code == 0 {
+            Ok(result.stdout.trim().to_string())
+        } else {
+            // Fallback to basic uptime
+            let result = self.execute_command("uptime").await?;
+            if result.exit_code == 0 {
+                Ok(result.stdout.trim().to_string())
+            } else {
+                Err(Error::CommandExecution(format!(
+                    "Failed to get uptime: {}",
+                    result.stderr
+                )))
+            }
+        }
+    }
+
+    pub async fn get_cpu_info(&mut self) -> Result<String> {
+        let result = self
+            .execute_command("cat /proc/cpuinfo | grep 'model name' | head -1 | cut -d':' -f2")
+            .await?;
+        if result.exit_code == 0 {
+            Ok(result.stdout.trim().to_string())
+        } else {
+            Ok("Unknown CPU".to_string())
+        }
+    }
+
+    pub async fn get_memory_usage(&mut self) -> Result<String> {
+        let result = self
+            .execute_command("free -h | grep Mem | awk '{print $3 \"/\" $2}'")
+            .await?;
+        if result.exit_code == 0 {
+            Ok(result.stdout.trim().to_string())
+        } else {
+            Ok("Unknown memory usage".to_string())
+        }
+    }
+
+    pub async fn get_disk_usage(&mut self) -> Result<String> {
+        let result = self
+            .execute_command("df -h / | tail -1 | awk '{print $3 \"/\" $2 \" (\" $5 \" used)\"}'")
+            .await?;
+        if result.exit_code == 0 {
+            Ok(result.stdout.trim().to_string())
+        } else {
+            Ok("Unknown disk usage".to_string())
+        }
+    }
+
+    pub async fn get_power_governor(&mut self) -> Result<String> {
+        let result = self.execute_command("cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo 'N/A'").await?;
+        Ok(result.stdout.trim().to_string())
+    }
+
+    pub async fn get_os_release(&mut self) -> Result<String> {
+        let result = self.execute_command("cat /etc/os-release").await?;
+        if result.exit_code == 0 {
+            Ok(result.stdout)
+        } else {
+            Ok("Unknown OS".to_string())
+        }
+    }
+
+    pub async fn get_foundries_registration(&mut self) -> Result<String> {
+        let result = self.execute_command("fioctl devices list --factory $(cat /etc/hostname) 2>/dev/null | grep $(cat /etc/hostname) | awk '{print $2}' || echo 'Not registered'").await?;
+        Ok(result.stdout.trim().to_string())
+    }
+
+    pub async fn get_wireguard_status(&mut self) -> Result<String> {
+        let result = self
+            .execute_command("systemctl is-active wireguard-client 2>/dev/null || echo 'Inactive'")
+            .await?;
+        Ok(result.stdout.trim().to_string())
     }
 
     pub async fn file_exists(&mut self, path: &str) -> Result<bool> {
-        let result = self
-            .execute_command(&format!(
-                "test -f {} && echo 'exists' || echo 'not_found'",
-                path
-            ))
-            .await?;
-        Ok(result.stdout.trim() == "exists")
+        let result = self.execute_command(&format!("test -f {}", path)).await?;
+        Ok(result.exit_code == 0)
+    }
+
+    pub async fn directory_exists(&mut self, path: &str) -> Result<bool> {
+        let result = self.execute_command(&format!("test -d {}", path)).await?;
+        Ok(result.exit_code == 0)
     }
 
     pub async fn read_file(&mut self, path: &str) -> Result<String> {
@@ -74,504 +226,178 @@ impl Target {
         }
     }
 
+    pub async fn write_file(&mut self, path: &str, content: &str) -> Result<()> {
+        let escaped_content = content.replace('\'', "'\"'\"'");
+        let result = self
+            .execute_command(&format!("echo '{}' > {}", escaped_content, path))
+            .await?;
+
+        if result.exit_code == 0 {
+            Ok(())
+        } else {
+            Err(Error::CommandExecution(format!(
+                "Failed to write file {}: {}",
+                path, result.stderr
+            )))
+        }
+    }
+
+    pub async fn get_process_count(&mut self) -> Result<usize> {
+        let result = self.execute_command("ps aux | wc -l").await?;
+        if result.exit_code == 0 {
+            let count = result.stdout.trim().parse::<usize>().unwrap_or(0);
+            // Subtract 1 for the header line
+            Ok(count.saturating_sub(1))
+        } else {
+            Ok(0)
+        }
+    }
+
+    pub async fn get_network_interfaces(&mut self) -> Result<Vec<String>> {
+        let result = self
+            .execute_command("ip link show | grep '^[0-9]' | awk -F': ' '{print $2}' | grep -v lo")
+            .await?;
+        if result.exit_code == 0 {
+            Ok(result
+                .stdout
+                .lines()
+                .map(|line| line.trim().to_string())
+                .filter(|line| !line.is_empty())
+                .collect())
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    pub async fn get_listening_ports(&mut self) -> Result<Vec<u16>> {
+        let result = self
+            .execute_command("ss -tlnp | grep LISTEN | awk '{print $4}' | cut -d':' -f2 | sort -n")
+            .await?;
+        if result.exit_code == 0 {
+            Ok(result
+                .stdout
+                .lines()
+                .filter_map(|line| line.trim().parse::<u16>().ok())
+                .collect())
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    pub async fn service_is_active(&mut self, service: &str) -> Result<bool> {
+        let result = self
+            .execute_command(&format!("systemctl is-active {}", service))
+            .await?;
+        Ok(result.exit_code == 0 && result.stdout.trim() == "active")
+    }
+
+    pub async fn service_is_enabled(&mut self, service: &str) -> Result<bool> {
+        let result = self
+            .execute_command(&format!("systemctl is-enabled {}", service))
+            .await?;
+        Ok(result.exit_code == 0 && result.stdout.trim() == "enabled")
+    }
+
+    pub async fn get_boot_time(&mut self) -> Result<Duration> {
+        let result = self
+            .execute_command(
+                "systemd-analyze | grep 'Startup finished' | awk '{print $(NF-1)}' | sed 's/s//'",
+            )
+            .await?;
+        if result.exit_code == 0 {
+            let seconds: f64 = result.stdout.trim().parse().unwrap_or(0.0);
+            Ok(Duration::from_secs_f64(seconds))
+        } else {
+            Ok(Duration::from_secs(0))
+        }
+    }
+
+    pub async fn get_cpu_usage(&mut self) -> Result<f64> {
+        let result = self
+            .execute_command("top -bn1 | grep 'Cpu(s)' | awk '{print $2}' | sed 's/%us,//'")
+            .await?;
+        if result.exit_code == 0 {
+            Ok(result.stdout.trim().parse().unwrap_or(0.0))
+        } else {
+            Ok(0.0)
+        }
+    }
+
+    pub async fn get_memory_usage_mb(&mut self) -> Result<u64> {
+        let result = self
+            .execute_command("free -m | grep Mem | awk '{print $3}'")
+            .await?;
+        if result.exit_code == 0 {
+            Ok(result.stdout.trim().parse().unwrap_or(0))
+        } else {
+            Ok(0)
+        }
+    }
+
     pub async fn get_system_info(&mut self) -> Result<SystemInfo> {
-        let uname = self.execute_command("uname -a").await?;
-        let uptime = self.execute_command("uptime").await?;
-        let memory = self.execute_command("free -m").await?;
-        let kernel_version = self.execute_command("uname -r").await?;
-        let os_release = self.read_file("/etc/os-release").await.unwrap_or_default();
-
-        // Check Foundries.io registration status
-        let foundries_registration = self.check_foundries_registration().await;
-
-        // Check WireGuard VPN status
-        let wireguard_status = self.check_wireguard_status().await;
-
-        // Get disk usage information
-        let disk_usage = self.get_disk_usage().await;
-
-        // Get CPU information
-        let cpu_info = self.get_cpu_info().await;
-
-        // Get detailed memory usage
-        let memory_usage = self.get_memory_usage().await;
-
-        // Get power governor configuration
-        let power_governor = self.get_power_governor().await;
-
         Ok(SystemInfo {
-            uname: uname.stdout.trim().to_string(),
-            uptime: uptime.stdout.trim().to_string(),
-            memory_info: memory.stdout.trim().to_string(),
-            kernel_version: kernel_version.stdout.trim().to_string(),
-            os_release,
-            foundries_registration,
-            wireguard_status,
-            disk_usage,
-            cpu_info,
-            memory_usage,
-            power_governor,
+            kernel_version: self
+                .get_kernel_version()
+                .await
+                .unwrap_or_else(|_| "Unknown".to_string()),
+            uptime: self
+                .get_uptime()
+                .await
+                .unwrap_or_else(|_| "Unknown".to_string()),
+            cpu_info: self
+                .get_cpu_info()
+                .await
+                .unwrap_or_else(|_| "Unknown".to_string()),
+            memory_usage: self
+                .get_memory_usage()
+                .await
+                .unwrap_or_else(|_| "Unknown".to_string()),
+            disk_usage: self
+                .get_disk_usage()
+                .await
+                .unwrap_or_else(|_| "Unknown".to_string()),
+            power_governor: self
+                .get_power_governor()
+                .await
+                .unwrap_or_else(|_| "Unknown".to_string()),
+            os_release: self
+                .get_os_release()
+                .await
+                .unwrap_or_else(|_| "Unknown".to_string()),
+            foundries_registration: self
+                .get_foundries_registration()
+                .await
+                .unwrap_or_else(|_| "Unknown".to_string()),
+            wireguard_status: self
+                .get_wireguard_status()
+                .await
+                .unwrap_or_else(|_| "Unknown".to_string()),
         })
-    }
-
-    async fn check_foundries_registration(&mut self) -> String {
-        // Check if device is registered with Foundries portal
-        // Look for device credentials and registration status
-
-        // Check for device gateway credentials
-        let device_creds = self
-            .execute_command("ls -la /var/sota/device-creds* 2>/dev/null | wc -l")
-            .await
-            .unwrap_or_default();
-        let has_device_creds = device_creds.stdout.trim().parse::<i32>().unwrap_or(0) > 0;
-
-        // Check for device UUID/ID
-        let device_uuid = self
-            .execute_command("cat /var/sota/device-uuid 2>/dev/null || echo 'not_found'")
-            .await
-            .unwrap_or_default();
-        let has_device_uuid =
-            !device_uuid.stdout.contains("not_found") && !device_uuid.stdout.trim().is_empty();
-
-        // Check for aktualizr-lite service (OTA client)
-        let aktualizr_status = self
-            .execute_command("systemctl is-active aktualizr-lite 2>/dev/null || echo 'inactive'")
-            .await
-            .unwrap_or_default();
-        let aktualizr_active = aktualizr_status.stdout.trim() == "active";
-
-        // Check for device registration in aktualizr config
-        let aktualizr_config = self
-            .execute_command(
-                "cat /var/sota/sota.toml 2>/dev/null | grep -E 'device_id|server' | head -2",
-            )
-            .await
-            .unwrap_or_default();
-        let has_server_config = aktualizr_config.stdout.contains("server")
-            || aktualizr_config.stdout.contains("device_id");
-
-        // Check for recent communication with Foundries
-        let last_update_check = self.execute_command("journalctl -u aktualizr-lite --since='24 hours ago' | grep -i 'check.*update\\|target.*update' | tail -1").await.unwrap_or_default();
-        let recent_communication = !last_update_check.stdout.trim().is_empty();
-
-        // Determine registration status
-        if has_device_creds && has_device_uuid && aktualizr_active && has_server_config {
-            if recent_communication {
-                "Registered and Active".to_string()
-            } else {
-                "Registered but No Recent Communication".to_string()
-            }
-        } else if has_device_creds || has_device_uuid {
-            "Partially Registered".to_string()
-        } else {
-            "Not Registered".to_string()
-        }
-    }
-
-    async fn check_wireguard_status(&mut self) -> String {
-        // Check WireGuard VPN status
-        let mut status_parts = Vec::<String>::new();
-
-        // Check if WireGuard kernel module is loaded
-        let wg_module = self
-            .execute_command("lsmod | grep wireguard")
-            .await
-            .unwrap_or_default();
-        let module_loaded = !wg_module.stdout.trim().is_empty();
-
-        // Check for WireGuard interfaces
-        let wg_interfaces = self
-            .execute_command(
-                "ip link show type wireguard 2>/dev/null | grep -o 'wg[0-9]*' | head -5",
-            )
-            .await
-            .unwrap_or_default();
-        let interfaces: Vec<&str> = wg_interfaces
-            .stdout
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .collect();
-
-        // Check WireGuard service status
-        let wg_service = self
-            .execute_command(
-                "systemctl is-active wg-quick@* 2>/dev/null | grep -v 'inactive' | head -1",
-            )
-            .await
-            .unwrap_or_default();
-        let service_active = wg_service.stdout.trim() == "active";
-
-        // Check for WireGuard configuration files
-        let wg_configs = self
-            .execute_command("ls /etc/wireguard/*.conf 2>/dev/null | wc -l")
-            .await
-            .unwrap_or_default();
-        let config_count = wg_configs.stdout.trim().parse::<i32>().unwrap_or(0);
-
-        // Check active connections
-        let wg_show = self
-            .execute_command("wg show 2>/dev/null | grep -E 'interface|peer' | wc -l")
-            .await
-            .unwrap_or_default();
-        let active_connections = wg_show.stdout.trim().parse::<i32>().unwrap_or(0);
-
-        // Build status string
-        if !module_loaded {
-            return "Not Available (module not loaded)".to_string();
-        }
-
-        status_parts.push("Module Loaded".to_string());
-
-        if !interfaces.is_empty() {
-            status_parts.push(format!("Interfaces: {}", interfaces.join(", ")));
-        }
-
-        if service_active {
-            status_parts.push("Service Active".to_string());
-        }
-
-        if config_count > 0 {
-            status_parts.push(format!("{} Config(s)", config_count));
-        }
-
-        if active_connections > 0 {
-            status_parts.push(format!("{} Active Connection(s)", active_connections / 2));
-            // Divide by 2 as each connection shows interface + peer
-        }
-
-        if status_parts.len() > 1 {
-            format!("Enabled ({})", status_parts.join(", "))
-        } else if status_parts.len() == 1 {
-            "Available but Not Configured".to_string()
-        } else {
-            "Disabled".to_string()
-        }
-    }
-
-    async fn get_disk_usage(&mut self) -> String {
-        // Get filesystem usage information - prioritize root filesystem
-        let df_output = self
-            .execute_command("df -h | grep -E '^/dev|^overlay|^tmpfs' | head -10")
-            .await
-            .unwrap_or_default();
-
-        if df_output.stdout.trim().is_empty() {
-            return "Unable to determine disk usage".to_string();
-        }
-
-        // Parse df output to get filesystem usage, prioritizing root
-        let mut disk_info = Vec::new();
-        let mut root_found = false;
-
-        for line in df_output.stdout.lines() {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 6 {
-                let _filesystem = parts[0];
-                let size = parts[1];
-                let used = parts[2];
-                let _available = parts[3];
-                let use_percent = parts[4];
-                let mount_point = parts[5];
-
-                // Prioritize root filesystem
-                if mount_point == "/" {
-                    disk_info.insert(
-                        0,
-                        format!("Root: {} total, {} used ({})", size, used, use_percent),
-                    );
-                    root_found = true;
-                } else if mount_point == "/var" || mount_point == "/boot" {
-                    disk_info.push(format!(
-                        "{}: {} total, {} used ({})",
-                        mount_point, size, used, use_percent
-                    ));
-                }
-            }
-        }
-
-        // If no root filesystem found, try a direct query
-        if !root_found {
-            let root_df = self
-                .execute_command("df -h / 2>/dev/null | tail -1")
-                .await
-                .unwrap_or_default();
-            if !root_df.stdout.trim().is_empty() {
-                let parts: Vec<&str> = root_df.stdout.split_whitespace().collect();
-                if parts.len() >= 5 {
-                    disk_info.insert(
-                        0,
-                        format!("Root: {} total, {} used ({})", parts[1], parts[2], parts[4]),
-                    );
-                }
-            }
-        }
-
-        if disk_info.is_empty() {
-            "Unable to parse disk usage".to_string()
-        } else {
-            // Return only the most important info (root + one other if available)
-            if disk_info.len() > 2 {
-                format!("{}, {}", disk_info[0], disk_info[1])
-            } else {
-                disk_info.join(", ")
-            }
-        }
-    }
-
-    async fn get_cpu_info(&mut self) -> String {
-        // Get CPU count and basic information
-        let cpu_count = self.execute_command("nproc").await.unwrap_or_default();
-        let cpu_model = self
-            .execute_command(
-                "cat /proc/cpuinfo | grep 'model name' | head -1 | cut -d':' -f2 | xargs",
-            )
-            .await
-            .unwrap_or_default();
-        let cpu_arch = self.execute_command("uname -m").await.unwrap_or_default();
-
-        // Get CPU frequencies
-        let cpu_freq_current = self
-            .execute_command("cat /proc/cpuinfo | grep 'cpu MHz' | head -1 | cut -d':' -f2 | xargs")
-            .await
-            .unwrap_or_default();
-        let cpu_freq_max = self
-            .execute_command(
-                "cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq 2>/dev/null | head -1",
-            )
-            .await
-            .unwrap_or_default();
-        let cpu_freq_min = self
-            .execute_command(
-                "cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq 2>/dev/null | head -1",
-            )
-            .await
-            .unwrap_or_default();
-
-        let mut cpu_info_parts = Vec::new();
-
-        // CPU count
-        if !cpu_count.stdout.trim().is_empty() {
-            cpu_info_parts.push(format!("{} cores", cpu_count.stdout.trim()));
-        }
-
-        // Architecture
-        if !cpu_arch.stdout.trim().is_empty() {
-            cpu_info_parts.push(cpu_arch.stdout.trim().to_string());
-        }
-
-        // CPU model (simplified)
-        if !cpu_model.stdout.trim().is_empty() {
-            let model = cpu_model.stdout.trim();
-            // Simplify long model names
-            if model.len() > 50 {
-                cpu_info_parts.push(format!("{}...", &model[..47]));
-            } else {
-                cpu_info_parts.push(model.to_string());
-            }
-        }
-
-        // Current frequency
-        if !cpu_freq_current.stdout.trim().is_empty() {
-            if let Ok(freq_mhz) = cpu_freq_current.stdout.trim().parse::<f64>() {
-                if freq_mhz > 1000.0 {
-                    cpu_info_parts.push(format!("{:.1} GHz", freq_mhz / 1000.0));
-                } else {
-                    cpu_info_parts.push(format!("{:.0} MHz", freq_mhz));
-                }
-            }
-        }
-
-        // Frequency range (if available)
-        if !cpu_freq_max.stdout.trim().is_empty() && !cpu_freq_min.stdout.trim().is_empty() {
-            if let (Ok(max_khz), Ok(min_khz)) = (
-                cpu_freq_max.stdout.trim().parse::<u64>(),
-                cpu_freq_min.stdout.trim().parse::<u64>(),
-            ) {
-                let max_ghz = max_khz as f64 / 1_000_000.0;
-                let min_ghz = min_khz as f64 / 1_000_000.0;
-                cpu_info_parts.push(format!("({:.1}-{:.1} GHz range)", min_ghz, max_ghz));
-            }
-        }
-
-        if cpu_info_parts.is_empty() {
-            "Unable to determine CPU information".to_string()
-        } else {
-            cpu_info_parts.join(", ")
-        }
-    }
-
-    async fn get_memory_usage(&mut self) -> String {
-        // Get detailed memory information
-        let meminfo = self
-            .execute_command(
-                "cat /proc/meminfo | grep -E '^MemTotal|^MemFree|^MemAvailable|^Buffers|^Cached'",
-            )
-            .await
-            .unwrap_or_default();
-
-        if meminfo.stdout.trim().is_empty() {
-            return "Unable to determine memory usage".to_string();
-        }
-
-        let mut mem_total_kb = 0u64;
-        let mut mem_available_kb = 0u64;
-        let mut mem_free_kb = 0u64;
-
-        for line in meminfo.stdout.lines() {
-            if let Some((key, value)) = line.split_once(':') {
-                let value = value.trim().replace(" kB", "");
-                if let Ok(kb) = value.parse::<u64>() {
-                    match key.trim() {
-                        "MemTotal" => mem_total_kb = kb,
-                        "MemAvailable" => mem_available_kb = kb,
-                        "MemFree" => mem_free_kb = kb,
-                        _ => {}
-                    }
-                }
-            }
-        }
-
-        if mem_total_kb == 0 {
-            return "Unable to parse memory information".to_string();
-        }
-
-        // Use MemAvailable if available, otherwise use MemFree
-        let available_kb = if mem_available_kb > 0 {
-            mem_available_kb
-        } else {
-            mem_free_kb
-        };
-        let used_kb = mem_total_kb - available_kb;
-        let usage_percent = (used_kb as f64 / mem_total_kb as f64) * 100.0;
-
-        // Convert to human readable units
-        let total_mb = mem_total_kb / 1024;
-        let used_mb = used_kb / 1024;
-        let _available_mb = available_kb / 1024;
-
-        if total_mb > 1024 {
-            let total_gb = total_mb as f64 / 1024.0;
-            let used_gb = used_mb as f64 / 1024.0;
-            format!(
-                "{:.1} GB total, {:.1} GB used ({:.1}%)",
-                total_gb, used_gb, usage_percent
-            )
-        } else {
-            format!(
-                "{} MB total, {} MB used ({:.1}%)",
-                total_mb, used_mb, usage_percent
-            )
-        }
-    }
-
-    async fn get_power_governor(&mut self) -> String {
-        // Check CPU frequency governor
-        let governor = self
-            .execute_command(
-                "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null",
-            )
-            .await
-            .unwrap_or_default();
-
-        if governor.stdout.trim().is_empty() {
-            // Check if cpufreq is available at all
-            let cpufreq_available = self
-                .execute_command("ls /sys/devices/system/cpu/cpu0/cpufreq/ 2>/dev/null | wc -l")
-                .await
-                .unwrap_or_default();
-            let has_cpufreq = cpufreq_available.stdout.trim().parse::<i32>().unwrap_or(0) > 0;
-
-            if !has_cpufreq {
-                // Check if this is an embedded system with fixed frequency
-                let cpu_model = self
-                    .execute_command("cat /proc/cpuinfo | grep -i 'model\\|processor' | head -1")
-                    .await
-                    .unwrap_or_default();
-                if cpu_model.stdout.to_lowercase().contains("arm")
-                    || cpu_model.stdout.to_lowercase().contains("cortex")
-                {
-                    return "Fixed frequency (embedded ARM)".to_string();
-                } else {
-                    return "No frequency scaling support".to_string();
-                }
-            } else {
-                return "Frequency scaling available but governor not set".to_string();
-            }
-        }
-
-        let current_governor = governor.stdout.trim();
-
-        // Get available governors
-        let available_governors = self
-            .execute_command(
-                "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null",
-            )
-            .await
-            .unwrap_or_default();
-
-        // Get current CPU frequency
-        let current_freq = self
-            .execute_command(
-                "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq 2>/dev/null",
-            )
-            .await
-            .unwrap_or_default();
-
-        let mut governor_info = vec![current_governor.to_string()];
-
-        // Add frequency info if available
-        if !current_freq.stdout.trim().is_empty() {
-            if let Ok(freq_khz) = current_freq.stdout.trim().parse::<u64>() {
-                let freq_mhz = freq_khz / 1000;
-                if freq_mhz > 1000 {
-                    governor_info.push(format!("{:.1} GHz", freq_mhz as f64 / 1000.0));
-                } else {
-                    governor_info.push(format!("{} MHz", freq_mhz));
-                }
-            }
-        }
-
-        // Add available governors info (but keep it concise)
-        if !available_governors.stdout.trim().is_empty() {
-            let available: Vec<&str> = available_governors.stdout.split_whitespace().collect();
-            if available.len() > 1 {
-                // Only show if there are multiple options
-                governor_info.push(format!("({} options)", available.len()));
-            }
-        }
-
-        governor_info.join(", ")
-    }
-
-    pub async fn disconnect(&mut self) -> Result<()> {
-        info!("Disconnecting from target");
-        self.ssh_client.disconnect().await
-    }
-
-    pub fn get_ssh_client(&mut self) -> &mut SshClient {
-        &mut self.ssh_client
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct CommandResult {
     pub stdout: String,
     pub stderr: String,
     pub exit_code: i32,
-    pub duration: Duration,
+}
+
+impl CommandResult {
+    pub fn success(&self) -> bool {
+        self.exit_code == 0
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SystemInfo {
-    pub uname: String,
-    pub uptime: String,
-    pub memory_info: String,
     pub kernel_version: String,
+    pub uptime: String,
+    pub cpu_info: String,
+    pub memory_usage: String,
+    pub disk_usage: String,
+    pub power_governor: String,
     pub os_release: String,
     pub foundries_registration: String,
     pub wireguard_status: String,
-    pub disk_usage: String,
-    pub cpu_info: String,
-    pub memory_usage: String,
-    pub power_governor: String,
 }

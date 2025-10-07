@@ -5,9 +5,9 @@
  */
 
 use crate::cli::MachineType;
+use crate::communication::CommunicationChannel;
 use crate::config::MachineConfig;
-use crate::ssh::SshClient;
-use anyhow::{Context, Result};
+use crate::error::Result;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -19,12 +19,12 @@ pub struct MachineInfo {
 }
 
 pub struct MachineDetector<'a> {
-    ssh_client: &'a mut SshClient,
+    comm_channel: &'a mut dyn CommunicationChannel,
 }
 
 impl<'a> MachineDetector<'a> {
-    pub fn new(ssh_client: &'a mut SshClient) -> Self {
-        Self { ssh_client }
+    pub fn new(comm_channel: &'a mut dyn CommunicationChannel) -> Self {
+        Self { comm_channel }
     }
 
     /// Detect the machine type based on hardware characteristics
@@ -45,21 +45,19 @@ impl<'a> MachineDetector<'a> {
 
     async fn get_cpu_info(&mut self) -> Result<String> {
         let output = self
-            .ssh_client
+            .comm_channel
             .execute_command(
                 "cat /proc/cpuinfo | grep -E '(model name|Hardware|Revision)' | head -3",
             )
-            .await
-            .context("Failed to get CPU info")?;
+            .await?;
         Ok(output.stdout)
     }
 
     async fn get_board_info(&mut self) -> Result<String> {
         let output = self
-            .ssh_client
+            .comm_channel
             .execute_command("cat /proc/device-tree/model 2>/dev/null || echo 'Unknown'")
-            .await
-            .context("Failed to get board info")?;
+            .await?;
         Ok(output.stdout.trim().to_string())
     }
 
@@ -105,7 +103,7 @@ impl<'a> MachineDetector<'a> {
 
     async fn check_feature_exists(&mut self, path: &str) -> bool {
         let command = format!("ls {} >/dev/null 2>&1", path);
-        if let Ok(output) = self.ssh_client.execute_command(&command).await {
+        if let Ok(output) = self.comm_channel.execute_command(&command).await {
             output.exit_code == 0
         } else {
             false
@@ -121,7 +119,7 @@ impl<'a> MachineDetector<'a> {
         ];
 
         for check in checks {
-            if let Ok(output) = self.ssh_client.execute_command(check).await {
+            if let Ok(output) = self.comm_channel.execute_command(check).await {
                 if output.exit_code == 0 {
                     return true;
                 }
@@ -146,7 +144,7 @@ impl<'a> MachineDetector<'a> {
         ];
 
         for check in checks {
-            if let Ok(output) = self.ssh_client.execute_command(check).await {
+            if let Ok(output) = self.comm_channel.execute_command(check).await {
                 if output.exit_code == 0 && !output.stdout.trim().is_empty() {
                     return true;
                 }

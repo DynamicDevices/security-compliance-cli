@@ -60,7 +60,7 @@ impl TestRunner {
 
         // Get system information
         let system_info = self.target.get_system_info().await?;
-        info!("Target system: {}", system_info.uname);
+        info!("Target system: {}", system_info.kernel_version);
 
         // Get tests for the suite, filtered by mode
         let test_ids_raw = self

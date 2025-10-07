@@ -1,4 +1,8 @@
 use crate::{
+    compliance::{
+        format_compliance_report_as_markdown, generate_pdf_report, CraComplianceReporter,
+        RedComplianceReporter,
+    },
     config::OutputConfig,
     error::Result,
     tests::{TestResult, TestStatus, TestSuiteResults},
@@ -66,6 +70,9 @@ impl OutputHandler {
                 );
                 println!();
             }
+            "cra" | "red" | "pdf" => {
+                // Compliance reports will be generated at the end
+            }
             _ => {}
         }
 
@@ -126,6 +133,9 @@ impl OutputHandler {
             "json" => self.output_json(results).await?,
             "junit" => self.output_junit(results).await?,
             "markdown" => self.output_markdown(results).await?,
+            "cra" => self.output_cra_compliance(results).await?,
+            "red" => self.output_red_compliance(results).await?,
+            "pdf" => self.output_pdf_report(results).await?,
             _ => {}
         }
 
@@ -420,9 +430,80 @@ impl OutputHandler {
         Ok(())
     }
 
+    async fn output_cra_compliance(&self, results: &TestSuiteResults) -> Result<()> {
+        let compliance_report = CraComplianceReporter::generate_report(results);
+        let markdown_report = format_compliance_report_as_markdown(&compliance_report);
+        println!("{}", markdown_report);
+        Ok(())
+    }
+
+    async fn output_red_compliance(&self, results: &TestSuiteResults) -> Result<()> {
+        let compliance_report = RedComplianceReporter::generate_report(results);
+        let markdown_report = format_compliance_report_as_markdown(&compliance_report);
+        println!("{}", markdown_report);
+        Ok(())
+    }
+
+    async fn output_pdf_report(&self, results: &TestSuiteResults) -> Result<()> {
+        // For PDF output, we need to determine which compliance framework to use
+        // Default to CRA if not specified in config
+        let compliance_report = CraComplianceReporter::generate_report(results);
+
+        // Generate a default filename if none specified
+        let default_filename = format!(
+            "compliance-report-{}.pdf",
+            chrono::Utc::now().format("%Y%m%d-%H%M%S")
+        );
+
+        let output_path = if let Some(file) = &self.config.file {
+            file.clone()
+        } else {
+            default_filename
+        };
+
+        match generate_pdf_report(&compliance_report, &output_path) {
+            Ok(()) => {
+                println!("✅ PDF report generated successfully: {}", output_path);
+            }
+            Err(e) => {
+                eprintln!("❌ Failed to generate PDF report: {}", e);
+                return Err(crate::error::Error::Io(std::io::Error::other(format!(
+                    "PDF generation failed: {}",
+                    e
+                ))));
+            }
+        }
+
+        Ok(())
+    }
+
     async fn write_to_file(&self, results: &TestSuiteResults, file_path: &str) -> Result<()> {
         let content = match self.config.format.as_str() {
             "json" => serde_json::to_string_pretty(results)?,
+            "cra" => {
+                let compliance_report = CraComplianceReporter::generate_report(results);
+                format_compliance_report_as_markdown(&compliance_report)
+            }
+            "red" => {
+                let compliance_report = RedComplianceReporter::generate_report(results);
+                format_compliance_report_as_markdown(&compliance_report)
+            }
+            "pdf" => {
+                // For PDF, we generate the file directly instead of returning content
+                let compliance_report = CraComplianceReporter::generate_report(results);
+                match generate_pdf_report(&compliance_report, file_path) {
+                    Ok(()) => {
+                        println!("PDF report written to: {}", file_path);
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        return Err(crate::error::Error::Io(std::io::Error::other(format!(
+                            "PDF generation failed: {}",
+                            e
+                        ))));
+                    }
+                }
+            }
             "junit" => {
                 // Generate JUnit XML content
                 format!(
