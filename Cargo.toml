@@ -34,7 +34,7 @@ bytes = "1.5"
 ed25519-dalek = { version = "2.0", features = ["rand_core"] }
 rand = "0.8"
 base64 = "0.22"
-ssh-key = { version = "0.6", features = ["ed25519", "encryption"] }
+ssh-key = { version = "0.6", features = ["ed25519", "encryption"], default-features = false }
 
 [dev-dependencies]
 tokio-test = "0.4"
