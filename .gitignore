@@ -16,3 +16,10 @@ Thumbs.db
 
 # Runtime results
 runtime_results.json
+
+# Test SSH keys and device keys
+test_device_key*
+test_ed25519*
+/tmp/test_*
+/tmp/board_ssh_key*
+/tmp/proper_ssh_key*
