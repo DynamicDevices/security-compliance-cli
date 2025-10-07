@@ -10,12 +10,13 @@ use crate::{
     error::Result,
     machine::filter_tests_for_machine,
     output::OutputHandler,
+    ssh_key::SshKeyInstaller,
     target::Target,
     tests::{SecurityTest, TestRegistry, TestStatus, TestSuiteResults},
 };
 use chrono::Utc;
 use std::time::Instant;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 pub struct TestRunner {
     target: Target,
@@ -189,6 +190,9 @@ impl TestRunner {
             .complete_test_suite(&suite_results)
             .await?;
 
+        // Check for remaining test keys and warn user
+        self.check_for_remaining_test_keys().await;
+
         info!("Test suite completed in {:?}", duration);
         info!(
             "Results: {} passed, {} failed, {} warnings, {} skipped, {} errors",
@@ -196,5 +200,45 @@ impl TestRunner {
         );
 
         Ok(suite_results)
+    }
+
+    /// Check if temporary test keys remain on the device and warn the user
+    async fn check_for_remaining_test_keys(&mut self) {
+        // Determine the target user - try to get from the current connection
+        let target_user = if let Some(_machine_config) = &self.machine_config {
+            // Try to get user from machine config or use default
+            "root".to_string() // Default for most embedded systems
+        } else {
+            "root".to_string()
+        };
+
+        let installer = SshKeyInstaller::new(target_user.clone(), false);
+        let comm_channel = self.target.get_communication_channel();
+
+        match installer.detect_temp_keys(comm_channel).await {
+            Ok(temp_keys) => {
+                if !temp_keys.is_empty() {
+                    warn!("⚠️  SECURITY WARNING: {} temporary test keys remain on the device!", temp_keys.len());
+                    warn!("🔑 These keys may allow unauthorized access to the device:");
+                    
+                    for (i, key) in temp_keys.iter().enumerate() {
+                        let display_key = installer.truncate_key_for_display(key);
+                        warn!("   {}. {}", i + 1, display_key);
+                    }
+                    
+                    warn!("🧹 To remove all temporary keys, run:");
+                    warn!("   security-compliance-cli uninstall-ssh-key --remove-temp-keys --target-user {}", target_user);
+                    warn!("");
+                    warn!("💡 For security, consider removing these keys before deploying to production!");
+                } else {
+                    info!("✅ No temporary test keys detected on device");
+                }
+            }
+            Err(e) => {
+                // Don't fail the entire test run if we can't check for keys
+                warn!("⚠️  Could not check for remaining test keys: {}", e);
+                warn!("💡 Manually verify no test keys remain: cat ~/.ssh/authorized_keys");
+            }
+        }
     }
 }
