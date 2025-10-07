@@ -106,37 +106,28 @@ jobs:
   functional-test:
     name: Functional Test
     runs-on: ubuntu-latest
-    needs: test
+    needs: build
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Cache dependencies
-      uses: actions/cache@v4
+    - name: Download Linux x86_64 artifact
+      uses: actions/download-artifact@v4
       with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-functional-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
+        name: security-compliance-cli-linux-x86_64
+        path: ./
 
-    - name: Build
-      run: cargo build --release
+    - name: Make binary executable
+      run: chmod +x security-compliance-cli
 
     - name: Test CLI help
-      run: ./target/release/security-compliance-cli --help
+      run: ./security-compliance-cli --help
 
     - name: Test CLI version
-      run: ./target/release/security-compliance-cli --version
+      run: ./security-compliance-cli --version
 
     - name: Test list command
-      run: ./target/release/security-compliance-cli list
+      run: ./security-compliance-cli list
 
     - name: Test config validation
       run: |
@@ -155,7 +146,7 @@ jobs:
         suite = "all"
         mode = "pre-production"
         EOF
-        ./target/release/security-compliance-cli validate test-config.toml
+        ./security-compliance-cli validate test-config.toml
 
   security:
     name: Security Audit
