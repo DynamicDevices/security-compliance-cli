@@ -16,6 +16,3 @@ Thumbs.db
 
 # Runtime results
 runtime_results.json
-
-# Test data (may contain sensitive information)
-test-data/
