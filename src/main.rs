@@ -245,6 +245,41 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        Commands::CheckSshKeys {
+            target_user,
+            detailed,
+            expired_only,
+            temp_keys_only,
+        } => {
+            info!("🔍 Checking for installed SSH test keys...");
+
+            let mut target = Target::new(config.communication.clone())?;
+            target.connect().await?;
+
+            let keys = SshKeyInstaller::check_ssh_keys(
+                target.get_communication_channel(),
+                target_user,
+                detailed,
+                expired_only,
+                temp_keys_only,
+            ).await?;
+
+            if keys.is_empty() {
+                info!("✅ No SSH test keys found matching the specified criteria");
+            } else {
+                info!("📊 Summary: Found {} SSH key(s)", keys.len());
+                let expired_count = keys.iter().filter(|k| k.is_expired).count();
+                let temp_count = keys.iter().filter(|k| k.is_temp_key).count();
+                
+                if expired_count > 0 {
+                    warn!("⚠️  {} expired key(s) found - these should be removed!", expired_count);
+                }
+                if temp_count > 0 {
+                    info!("🧹 {} temporary test key(s) found", temp_count);
+                }
+            }
+        }
+
         Commands::UninstallSshKey {
             public_key_file,
             private_key_file,
