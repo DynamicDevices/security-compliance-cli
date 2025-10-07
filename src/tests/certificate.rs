@@ -98,16 +98,16 @@ impl SecurityTest for CertificateTests {
 
     fn description(&self) -> &str {
         match self {
-            Self::X509Validation => "Verify X.509 certificate format and validation",
-            Self::PkiInfrastructure => "Assess PKI infrastructure components and health",
-            Self::CertificateExpiration => "Monitor certificate expiration dates and alerts",
-            Self::CertificateChain => "Validate complete certificate trust chains",
-            Self::CertificateRevocation => "Check CRL and OCSP revocation mechanisms",
-            Self::SecureCertStorage => "Verify secure storage of private keys and certificates",
-            Self::CaCertManagement => "Check CA certificate management and updates",
-            Self::TlsCertValidation => "Validate TLS certificates for services",
-            Self::CertificateRotation => "Verify certificate rotation and renewal processes",
-            Self::ComplianceStandards => "Check compliance with certificate standards",
+            Self::X509Validation => "Validates X.509 digital certificate integrity, format compliance, and cryptographic signatures. Ensures certificates meet industry standards and can be trusted for authentication and encryption. Critical for establishing secure communications and preventing man-in-the-middle attacks through certificate spoofing.",
+            Self::PkiInfrastructure => "Assesses Public Key Infrastructure (PKI) implementation including certificate authorities, trust chains, and key management. Evaluates the foundation of digital trust and certificate lifecycle management. Essential for maintaining a secure and scalable certificate-based security architecture.",
+            Self::CertificateExpiration => "Monitors certificate expiration dates and validates renewal processes to prevent service disruptions. Identifies certificates nearing expiration and ensures automated renewal mechanisms are in place. Critical for maintaining continuous service availability and preventing security gaps due to expired certificates.",
+            Self::CertificateChain => "Validates complete certificate trust chains from end-entity certificates to root certificate authorities. Ensures proper certificate hierarchy and trust path validation. Fundamental for establishing trust relationships and preventing certificate validation bypass attacks.",
+            Self::CertificateRevocation => "Verifies certificate revocation mechanisms including CRL (Certificate Revocation Lists) and OCSP (Online Certificate Status Protocol). Ensures compromised or invalid certificates are properly revoked and cannot be used. Essential for maintaining certificate security and preventing use of compromised credentials.",
+            Self::SecureCertStorage => "Evaluates secure storage mechanisms for private keys and certificates including hardware security modules and encrypted storage. Prevents unauthorized access to cryptographic materials. Critical for protecting the foundation of PKI security and preventing key compromise.",
+            Self::CaCertManagement => "Assesses Certificate Authority (CA) certificate management including root CA protection, intermediate CA policies, and certificate issuance controls. Ensures proper CA security and certificate issuance governance. Fundamental for maintaining PKI trust and preventing unauthorized certificate issuance.",
+            Self::TlsCertValidation => "Validates TLS/SSL certificate configuration and validation processes for secure communications. Ensures proper certificate verification in network protocols. Essential for preventing encrypted communication interception and maintaining data confidentiality in transit.",
+            Self::CertificateRotation => "Verifies automated certificate rotation and renewal mechanisms to maintain security without service interruption. Ensures certificates are regularly updated and replaced before expiration. Important for maintaining operational security and preventing certificate-related outages.",
+            Self::ComplianceStandards => "Validates certificate management compliance with industry standards such as PKCS, RFC specifications, and regulatory requirements. Ensures certificate practices meet legal and industry requirements. Critical for regulatory compliance and interoperability with external systems and partners.",
         }
     }
 }

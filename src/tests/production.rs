@@ -98,16 +98,16 @@ impl SecurityTest for ProductionTests {
 
     fn description(&self) -> &str {
         match self {
-            Self::DebugInterfacesDisabled => "Verify debug interfaces are disabled in production",
-            Self::DevelopmentToolsRemoved => "Check that development tools are removed",
-            Self::DefaultCredentialsChanged => "Verify default passwords and keys are changed",
-            Self::UnnecessaryServicesDisabled => "Check that unnecessary services are disabled",
-            Self::LoggingConfigured => "Verify production logging is properly configured",
-            Self::MonitoringEnabled => "Check that system monitoring is enabled",
-            Self::BackupSystemsActive => "Verify backup and recovery systems are active",
-            Self::SecurityUpdatesEnabled => "Check that security updates are enabled",
-            Self::NetworkHardening => "Verify network hardening measures are applied",
-            Self::FileSystemHardening => "Check filesystem hardening configurations",
+            Self::DebugInterfacesDisabled => "Ensures debug interfaces and development tools are disabled in production to prevent unauthorized access and information disclosure. Checks for active debug services, JTAG interfaces, and development consoles. Critical for preventing attackers from accessing debugging capabilities that could expose sensitive system information or provide elevated access.",
+            Self::DevelopmentToolsRemoved => "Validates that development and debugging tools are removed from production systems to reduce attack surface. Checks for compilers, debuggers, and development utilities that could be used by attackers. Essential for preventing on-system compilation of malicious code and reducing available attack tools.",
+            Self::DefaultCredentialsChanged => "Verifies that all default passwords, keys, and credentials have been changed from their factory defaults. Checks system accounts, service credentials, and cryptographic keys. Fundamental security requirement as default credentials are well-known and easily exploited by attackers.",
+            Self::UnnecessaryServicesDisabled => "Ensures unnecessary services and daemons are disabled to minimize attack surface and resource consumption. Identifies and validates that only required services are running. Important for reducing potential entry points for attackers and improving system performance and stability.",
+            Self::LoggingConfigured => "Validates that comprehensive production logging is properly configured for security monitoring and forensic analysis. Checks log levels, retention policies, and secure log storage. Essential for incident detection, compliance requirements, and post-incident analysis.",
+            Self::MonitoringEnabled => "Verifies that system monitoring and alerting mechanisms are active to detect security incidents and system issues. Checks for monitoring agents, health checks, and alerting systems. Critical for maintaining situational awareness and rapid incident response in production environments.",
+            Self::BackupSystemsActive => "Ensures backup and disaster recovery systems are properly configured and operational. Validates backup schedules, integrity checks, and recovery procedures. Fundamental for business continuity and recovery from security incidents, system failures, or data corruption.",
+            Self::SecurityUpdatesEnabled => "Validates that automated security update mechanisms are enabled and functioning correctly. Checks update policies, patch management systems, and vulnerability remediation processes. Critical for maintaining security posture against newly discovered vulnerabilities and threats.",
+            Self::NetworkHardening => "Verifies that network security hardening measures are properly implemented including firewall rules, network segmentation, and secure protocols. Checks for unnecessary network services and proper access controls. Essential for preventing network-based attacks and lateral movement.",
+            Self::FileSystemHardening => "Validates filesystem security hardening including proper permissions, access controls, and security attributes. Checks for secure mount options, file permissions, and directory restrictions. Important for preventing unauthorized file access and privilege escalation through filesystem vulnerabilities.",
         }
     }
 }

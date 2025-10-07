@@ -78,11 +78,11 @@ impl SecurityTest for NetworkSecurityTests {
 
     fn description(&self) -> &str {
         match self {
-            Self::OpenPorts => "Check for unnecessary open network ports",
-            Self::NetworkServices => "Verify network service security configuration",
-            Self::WifiSecurity => "Check WiFi security settings and protocols",
-            Self::BluetoothSecurity => "Verify Bluetooth security configuration",
-            Self::NetworkEncryption => "Check network traffic encryption capabilities",
+            Self::OpenPorts => "Identifies unnecessary open network ports that could provide attack vectors. Scans for listening services and flags potentially risky ports (telnet, FTP, HTTP) that should be secured or disabled. Helps minimize the attack surface by ensuring only required services are accessible.",
+            Self::NetworkServices => "Evaluates the security configuration of network services including SSH, web servers, and other network daemons. Checks for secure protocols, proper authentication mechanisms, and service hardening. Critical for preventing unauthorized network access and service exploitation.",
+            Self::WifiSecurity => "Validates WiFi security protocols and configuration to prevent wireless network attacks. Checks for WPA3/WPA2 encryption, secure authentication methods, and proper wireless security policies. Essential for protecting wireless communications from eavesdropping and unauthorized access.",
+            Self::BluetoothSecurity => "Assesses Bluetooth security configuration and identifies potential vulnerabilities in wireless personal area network communications. Checks for secure pairing, encryption settings, and Bluetooth service security. Important for preventing Bluetooth-based attacks and unauthorized device connections.",
+            Self::NetworkEncryption => "Verifies that network communications are properly encrypted using strong cryptographic protocols. Checks for TLS/SSL implementation, secure cipher suites, and encrypted communication channels. Fundamental for protecting data in transit from interception and manipulation.",
         }
     }
 }

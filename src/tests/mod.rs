@@ -74,6 +74,7 @@ pub enum TestStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestSuiteResults {
     pub suite_name: String,
+    pub test_mode: String,
     pub total_tests: usize,
     pub passed: usize,
     pub failed: usize,
@@ -219,6 +220,7 @@ impl TestRegistry {
         self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::UserPermissions));
         self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::ServiceHardening));
         self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::KernelProtections));
+        self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::ReadOnlyFilesystem));
     }
 
     fn register_network_tests(&mut self) {

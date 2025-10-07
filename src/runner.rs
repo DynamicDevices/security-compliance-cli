@@ -15,10 +15,12 @@ pub struct TestRunner {
     output_handler: OutputHandler,
     registry: TestRegistry,
     test_mode: TestMode,
+    verbose: u8,
 }
 
 impl TestRunner {
     pub fn new(target: Target, output_config: OutputConfig, test_mode: TestMode) -> Result<Self> {
+        let verbose = output_config.verbose;
         let output_handler = OutputHandler::new(output_config)?;
         let registry = TestRegistry::new();
         
@@ -27,6 +29,7 @@ impl TestRunner {
             output_handler,
             registry,
             test_mode,
+            verbose,
         })
     }
 
@@ -59,7 +62,15 @@ impl TestRunner {
         // Run each test
         for (index, test_id) in test_ids.iter().enumerate() {
             if let Some(test) = self.registry.get_test(test_id) {
-                info!("Running test {}/{}: {} - {}", index + 1, test_ids.len(), test.test_id(), test.test_name());
+                if self.verbose > 0 {
+                    info!("Running test {}/{}: {} - {}", index + 1, test_ids.len(), test.test_id(), test.test_name());
+                    info!("📋 Purpose: {}", test.description());
+                    if self.verbose > 1 {
+                        info!("🏷️  Category: {}", test.category());
+                    }
+                } else {
+                    info!("Running test {}/{}: {} - {}", index + 1, test_ids.len(), test.test_id(), test.test_name());
+                }
                 
                 self.output_handler.start_test(test.test_id(), test.test_name()).await?;
                 
@@ -102,6 +113,7 @@ impl TestRunner {
         
         let suite_results = TestSuiteResults {
             suite_name: format!("{:?}", test_suite),
+            test_mode: format!("{:?}", self.test_mode),
             total_tests: test_ids.len(),
             passed,
             failed,
