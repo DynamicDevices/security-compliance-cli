@@ -20,12 +20,16 @@
  */
 
 pub mod cli;
+pub mod communication;
+pub mod compliance;
 pub mod config;
 pub mod error;
 pub mod machine;
 pub mod output;
 pub mod runner;
-pub mod ssh;
+pub mod serial_channel;
+pub mod ssh_channel;
+pub mod ssh_key;
 pub mod target;
 pub mod tests;
 

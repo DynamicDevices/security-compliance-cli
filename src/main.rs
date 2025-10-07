@@ -26,6 +26,7 @@ use security_compliance_cli::{
     config::Config,
     machine::MachineDetector,
     runner::TestRunner,
+    ssh_key::SshKeyInstaller,
     target::Target,
 };
 use std::process;
@@ -44,21 +45,37 @@ async fn main() -> Result<()> {
     let mut config = Config::from_cli(&cli)?;
 
     info!("Security Compliance CLI v{}", env!("CARGO_PKG_VERSION"));
-    info!("Target: {}:{}", config.target.host, config.target.port);
+    let description = match config.communication.channel_type.as_str() {
+        "ssh" => format!(
+            "SSH {}:{}",
+            config.communication.host.as_deref().unwrap_or("unknown"),
+            config.communication.port.unwrap_or(22)
+        ),
+        "serial" => format!(
+            "Serial {}",
+            config
+                .communication
+                .serial_device
+                .as_deref()
+                .unwrap_or("unknown")
+        ),
+        _ => "Unknown communication channel".to_string(),
+    };
+    info!("Target: {}", description);
 
     match cli.command {
         Commands::Test {
             test_suite, mode, ..
         } => {
-            let mut target = Target::new(config.target.clone())?;
+            let mut target = Target::new(config.communication.clone())?;
             target.connect().await?;
 
             // Perform machine detection if auto-detect is enabled
             if let Some(machine_config) = &config.machine {
                 if machine_config.auto_detect {
                     info!("🔍 Auto-detecting target machine type...");
-                    let ssh_client = target.get_ssh_client();
-                    let mut detector = MachineDetector::new(ssh_client);
+                    let comm_channel = target.get_communication_channel();
+                    let mut detector = MachineDetector::new(comm_channel);
 
                     match detector.detect_machine().await {
                         Ok(machine_info) => {
@@ -102,11 +119,11 @@ async fn main() -> Result<()> {
             println!("{:#?}", config);
         }
         Commands::Detect => {
-            let mut target = Target::new(config.target)?;
+            let mut target = Target::new(config.communication)?;
             target.connect().await?;
 
-            let ssh_client = target.get_ssh_client();
-            let mut detector = MachineDetector::new(ssh_client);
+            let comm_channel = target.get_communication_channel();
+            let mut detector = MachineDetector::new(comm_channel);
 
             info!("🔍 Detecting target machine type and hardware features...");
             let machine_info = detector.detect_machine().await?;
@@ -135,6 +152,79 @@ async fn main() -> Result<()> {
 
             if machine_info.detected_features.is_empty() {
                 println!("  (No specific hardware features detected)");
+            }
+        }
+        Commands::InstallSshKey {
+            public_key_file,
+            key_validity_hours,
+            save_private_key,
+            test_connection,
+            target_user,
+        } => {
+            // Ensure we're using serial communication for key installation
+            if config.communication.channel_type != "serial" {
+                error!("❌ SSH key installation requires serial console connection");
+                error!("💡 Use --serial-device /dev/ttyUSB0 (or appropriate device) to connect via serial");
+                process::exit(1);
+            }
+
+            info!("🔑 Installing SSH key via serial console...");
+
+            let mut target = Target::new(config.communication.clone())?;
+            target.connect().await?;
+
+            // Determine target user - use provided value, serial username, or default to 'root'
+            let target_username = target_user
+                .or_else(|| config.communication.serial_username.clone())
+                .unwrap_or_else(|| "root".to_string());
+
+            info!("👤 Installing SSH key for user: {}", target_username);
+
+            let installer = SshKeyInstaller::new(target_username, test_connection);
+
+            // Get host and port for connection testing
+            let host = config.communication.host.as_deref().unwrap_or("192.168.0.36");
+            let port = config.communication.port.unwrap_or(22);
+
+            let comm_channel = target.get_communication_channel();
+            
+            match installer.install_ssh_key_workflow(
+                comm_channel,
+                public_key_file.as_deref(),
+                key_validity_hours,
+                save_private_key.as_deref(),
+                host,
+                port,
+            ).await {
+                Ok(key_pair) => {
+                    info!("✅ SSH key installation completed successfully!");
+                    
+                    if let Some(expires_at) = key_pair.expires_at {
+                        info!("⏰ Key expires at: {}", expires_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                    }
+                    
+                    if !key_pair.private_key.is_empty() {
+                        info!("🔐 Generated key type: {}", key_pair.key_type);
+                        
+                        if save_private_key.is_none() {
+                            warn!("⚠️  Private key generated but not saved - you won't be able to use it after this session");
+                            warn!("💡 Use --save-private-key /path/to/key to save for later use");
+                        }
+                    }
+                    
+                    info!("🌐 You can now connect via SSH using:");
+                    if let Some(key_file) = &save_private_key {
+                        info!("   ssh -i {} {}@{}", key_file.display(), installer.target_user, host);
+                    } else if public_key_file.is_some() {
+                        info!("   ssh -i <your_private_key> {}@{}", installer.target_user, host);
+                    } else {
+                        info!("   (Private key was not saved - connection not possible)");
+                    }
+                }
+                Err(e) => {
+                    error!("❌ SSH key installation failed: {}", e);
+                    process::exit(1);
+                }
             }
         }
     }

@@ -1,4 +1,5 @@
 use crate::cli::{Cli, MachineType, OutputFormat};
+use crate::communication::ChannelConfig;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -6,7 +7,7 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub target: TargetConfig,
+    pub communication: CommunicationConfig,
     pub output: OutputConfig,
     pub tests: TestConfig,
     pub thresholds: ThresholdConfig,
@@ -14,14 +15,57 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TargetConfig {
-    pub host: String,
-    pub port: u16,
-    pub user: String,
-    pub password: String,
+pub struct CommunicationConfig {
+    pub channel_type: String, // "ssh" or "serial"
+    // SSH fields
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub user: Option<String>,
+    pub password: Option<String>,
     pub ssh_key_path: Option<String>,
+    pub ssh_multiplex: Option<bool>,
+    // Serial fields
+    pub serial_device: Option<String>,
+    pub baud_rate: Option<u32>,
+    pub serial_username: Option<String>,
+    pub serial_password: Option<String>,
+    pub serial_login_prompt: Option<String>,
+    pub serial_password_prompt: Option<String>,
+    pub serial_shell_prompt: Option<String>,
+    // Common fields
     pub timeout: u64,
-    pub ssh_multiplex: bool,
+}
+
+impl CommunicationConfig {
+    pub fn to_channel_config(&self) -> Result<ChannelConfig> {
+        match self.channel_type.as_str() {
+            "ssh" => Ok(ChannelConfig::Ssh {
+                host: self.host.clone().unwrap_or_else(|| "localhost".to_string()),
+                port: self.port.unwrap_or(22),
+                user: self.user.clone().unwrap_or_else(|| "root".to_string()),
+                password: self.password.clone().unwrap_or_default(),
+                ssh_key_path: self.ssh_key_path.clone(),
+                timeout: self.timeout as u32,
+                ssh_multiplex: self.ssh_multiplex.unwrap_or(false),
+            }),
+            "serial" => Ok(ChannelConfig::Serial {
+                device: self.serial_device.clone().ok_or_else(|| {
+                    anyhow::anyhow!("Serial device path is required for serial communication")
+                })?,
+                baud_rate: self.baud_rate.unwrap_or(115200),
+                timeout: self.timeout as u32,
+                login_prompt: self.serial_login_prompt.clone(),
+                password_prompt: self.serial_password_prompt.clone(),
+                shell_prompt: self.serial_shell_prompt.clone(),
+                username: self.serial_username.clone(),
+                password: self.serial_password.clone(),
+            }),
+            _ => Err(anyhow::anyhow!(
+                "Unsupported communication channel type: {}",
+                self.channel_type
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,21 +109,91 @@ impl Config {
         };
 
         // Override with CLI arguments
-        config.target.host = cli.host.clone();
-        config.target.port = cli.port;
-        config.target.user = cli.user.clone();
-        config.target.password = cli.password.clone();
-        config.target.ssh_key_path = cli
-            .identity_file
-            .as_ref()
-            .map(|p| p.to_string_lossy().to_string());
-        config.target.timeout = cli.timeout;
+        // Only override communication settings if explicitly provided via CLI
+        let cli_has_serial = cli.serial_device.is_some();
+        let cli_has_ssh = !cli.host.is_empty()
+            || cli.port != 22
+            || !cli.user.is_empty()
+            || !cli.password.is_empty()
+            || cli.identity_file.is_some();
+
+        // Determine if we should override the communication config
+        let should_override_comm = cli_has_serial || (cli.config.is_none() && cli_has_ssh);
+
+        if should_override_comm {
+            // Determine communication channel type
+            let channel_type = if cli_has_serial { "serial" } else { "ssh" };
+
+            // Configure communication based on channel type
+            config.communication = CommunicationConfig {
+                channel_type: channel_type.to_string(),
+                // SSH fields
+                host: if channel_type == "ssh" {
+                    Some(cli.host.clone())
+                } else {
+                    None
+                },
+                port: if channel_type == "ssh" {
+                    Some(cli.port)
+                } else {
+                    None
+                },
+                user: if channel_type == "ssh" {
+                    Some(cli.user.clone())
+                } else {
+                    None
+                },
+                password: if channel_type == "ssh" {
+                    Some(cli.password.clone())
+                } else {
+                    None
+                },
+                ssh_key_path: cli
+                    .identity_file
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string()),
+                ssh_multiplex: if channel_type == "ssh" {
+                    Some(true)
+                } else {
+                    None
+                },
+                // Serial fields
+                serial_device: cli.serial_device.clone(),
+                baud_rate: if channel_type == "serial" {
+                    Some(cli.baud_rate)
+                } else {
+                    None
+                },
+                serial_username: cli.serial_username.clone(),
+                serial_password: cli.serial_password.clone(),
+                serial_login_prompt: if channel_type == "serial" {
+                    Some(cli.serial_login_prompt.clone())
+                } else {
+                    None
+                },
+                serial_password_prompt: if channel_type == "serial" {
+                    Some(cli.serial_password_prompt.clone())
+                } else {
+                    None
+                },
+                serial_shell_prompt: if channel_type == "serial" {
+                    Some(cli.serial_shell_prompt.clone())
+                } else {
+                    None
+                },
+                // Common fields
+                timeout: cli.timeout,
+            };
+        }
         config.output.verbose = cli.verbose;
         config.output.format = match cli.format {
             OutputFormat::Human => "human".to_string(),
             OutputFormat::Json => "json".to_string(),
             OutputFormat::Junit => "junit".to_string(),
             OutputFormat::Markdown => "markdown".to_string(),
+            OutputFormat::Cra => "cra".to_string(),
+            OutputFormat::Red => "red".to_string(),
+            OutputFormat::Pdf => "pdf".to_string(),
         };
 
         if let Some(output_file) = &cli.output {
@@ -153,14 +267,22 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            target: TargetConfig {
-                host: "192.168.0.36".to_string(),
-                port: 22,
-                user: "fio".to_string(),
-                password: "fio".to_string(),
+            communication: CommunicationConfig {
+                channel_type: "ssh".to_string(),
+                host: Some("192.168.0.36".to_string()),
+                port: Some(22),
+                user: Some("fio".to_string()),
+                password: Some("fio".to_string()),
                 ssh_key_path: None,
+                ssh_multiplex: Some(true),
+                serial_device: None,
+                baud_rate: None,
+                serial_username: None,
+                serial_password: None,
+                serial_login_prompt: None,
+                serial_password_prompt: None,
+                serial_shell_prompt: None,
                 timeout: 30,
-                ssh_multiplex: true,
             },
             output: OutputConfig {
                 format: "human".to_string(),
