@@ -92,7 +92,8 @@ impl OutputHandler {
 
     pub async fn complete_test(&mut self, result: &TestResult) -> Result<()> {
         if self.config.format.as_str() == "human"
-            && (self.progress_bar.is_none() || self.config.verbose > 0) {
+            && (self.progress_bar.is_none() || self.config.verbose > 0)
+        {
             let status_icon = match result.status {
                 TestStatus::Passed => "✅".green(),
                 TestStatus::Failed => "❌".red(),

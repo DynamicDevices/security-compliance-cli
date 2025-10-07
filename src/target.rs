@@ -533,10 +533,7 @@ impl Target {
 
         // Add available governors info (but keep it concise)
         if !available_governors.stdout.trim().is_empty() {
-            let available: Vec<&str> = available_governors
-                .stdout
-                  .split_whitespace()
-                .collect();
+            let available: Vec<&str> = available_governors.stdout.split_whitespace().collect();
             if available.len() > 1 {
                 // Only show if there are multiple options
                 governor_info.push(format!("({} options)", available.len()));
