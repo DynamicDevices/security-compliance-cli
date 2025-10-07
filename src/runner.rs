@@ -218,14 +218,17 @@ impl TestRunner {
         match installer.detect_temp_keys(comm_channel).await {
             Ok(temp_keys) => {
                 if !temp_keys.is_empty() {
-                    warn!("⚠️  SECURITY WARNING: {} temporary test keys remain on the device!", temp_keys.len());
+                    warn!(
+                        "⚠️  SECURITY WARNING: {} temporary test keys remain on the device!",
+                        temp_keys.len()
+                    );
                     warn!("🔑 These keys may allow unauthorized access to the device:");
-                    
+
                     for (i, key) in temp_keys.iter().enumerate() {
                         let display_key = installer.truncate_key_for_display(key);
                         warn!("   {}. {}", i + 1, display_key);
                     }
-                    
+
                     warn!("🧹 To remove all temporary keys, run:");
                     warn!("   security-compliance-cli uninstall-ssh-key --remove-temp-keys --target-user {}", target_user);
                     warn!("");
