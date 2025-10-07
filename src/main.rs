@@ -262,7 +262,8 @@ async fn main() -> Result<()> {
                 detailed,
                 expired_only,
                 temp_keys_only,
-            ).await?;
+            )
+            .await?;
 
             if keys.is_empty() {
                 info!("✅ No SSH test keys found matching the specified criteria");
@@ -270,9 +271,12 @@ async fn main() -> Result<()> {
                 info!("📊 Summary: Found {} SSH key(s)", keys.len());
                 let expired_count = keys.iter().filter(|k| k.is_expired).count();
                 let temp_count = keys.iter().filter(|k| k.is_temp_key).count();
-                
+
                 if expired_count > 0 {
-                    warn!("⚠️  {} expired key(s) found - these should be removed!", expired_count);
+                    warn!(
+                        "⚠️  {} expired key(s) found - these should be removed!",
+                        expired_count
+                    );
                 }
                 if temp_count > 0 {
                     info!("🧹 {} temporary test key(s) found", temp_count);
