@@ -95,8 +95,15 @@ impl Config {
             
             config.machine = Some(MachineConfig {
                 machine_type: machine_type_str,
-                auto_detect: false,
+                auto_detect: false, // Explicitly set via CLI
                 hardware_features: get_machine_features(machine_type),
+            });
+        } else {
+            // Enable auto-detection by default
+            config.machine = Some(MachineConfig {
+                machine_type: "auto".to_string(),
+                auto_detect: true,
+                hardware_features: vec![], // Will be populated during detection
             });
         }
 
@@ -119,6 +126,23 @@ impl Config {
         fs::write(path, content).context("Failed to write configuration file")?;
 
         Ok(())
+    }
+
+    /// Update machine configuration with detected information
+    pub fn update_machine_config(&mut self, machine_type: Option<MachineType>, features: Vec<String>) {
+        if let Some(machine_config) = &mut self.machine {
+            if machine_config.auto_detect {
+                if let Some(detected_type) = machine_type {
+                    machine_config.machine_type = match detected_type {
+                        MachineType::Imx93JaguarEink => "imx93-jaguar-eink".to_string(),
+                        MachineType::Imx8mmJaguarSentai => "imx8mm-jaguar-sentai".to_string(),
+                    };
+                } else {
+                    machine_config.machine_type = "unknown".to_string();
+                }
+                machine_config.hardware_features = features;
+            }
+        }
     }
 }
 
@@ -153,7 +177,11 @@ impl Default for Config {
                 memory_usage_max_mb: 512,
                 cpu_usage_max_percent: 80.0,
             },
-            machine: None,
+            machine: Some(MachineConfig {
+                machine_type: "auto".to_string(),
+                auto_detect: true,
+                hardware_features: vec![],
+            }),
         }
     }
 }
