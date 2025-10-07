@@ -103,7 +103,7 @@ impl ContainerSecurityTests {
         let docker_check = target.execute_command("which docker 2>/dev/null || which podman 2>/dev/null || echo 'not_found'").await?;
         
         if docker_check.stdout.contains("not_found") {
-            return Ok((TestStatus::Skipped, "No container runtime detected".to_string(), None));
+            return Ok((TestStatus::Failed, "No container runtime detected - install Docker or Podman".to_string(), None));
         }
 
         // Check Docker daemon configuration

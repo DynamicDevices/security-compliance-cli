@@ -49,14 +49,43 @@ cargo build --release
 cargo install --path .
 ```
 
+### Board Setup
+
+Before running tests, you need to configure SSH access to your target board. See [docs/SSH_SETUP.md](docs/SSH_SETUP.md) for detailed instructions on:
+
+- Setting up SSH keys for secure access
+- Configuring the board for remote testing
+- Installing test credentials for development
+
+For quick setup, you can use the automated scripts:
+
+```bash
+# Install test SSH key to local system (~/.ssh/)
+./scripts/install-test-key.sh
+
+# Then configure the board using the commands from SSH_SETUP.md
+# Copy and paste the setup commands into your board's serial terminal
+```
+
+The install script will:
+- Copy test keys to your local `~/.ssh/` directory
+- Add SSH config entries for easy board access
+- Set proper file permissions automatically
+
 ### Basic Usage
 
 ```bash
-# Run all security compliance tests in pre-production mode
-security-compliance-cli test --host 192.168.0.36 --user fio --password fio --mode pre-production
+# Run all security compliance tests using SSH key authentication (recommended)
+security-compliance-cli --host 192.168.0.36 --user fio test --mode pre-production
+
+# Run tests with explicit SSH key path
+security-compliance-cli --host 192.168.0.36 --user fio --identity-file ~/.ssh/test_ed25519 test
+
+# Run tests with password authentication (fallback)
+security-compliance-cli --host 192.168.0.36 --user fio --password fio test --mode pre-production
 
 # Run all tests in production mode (strict compliance)
-security-compliance-cli test --host 192.168.0.36 --mode production
+security-compliance-cli --host 192.168.0.36 --user fio test --mode production
 
 # Run specific test suite
 security-compliance-cli test --test-suite boot --host 192.168.0.36
@@ -449,16 +478,33 @@ security-compliance-cli test --test-suite boot
 
 ## Support
 
-- **Maintainer**: Alex J Lennon <ajlennon@dynamicdevices.co.uk>
+- **Maintainer**: Alex J Lennon <alex@dynamicdevices.co.uk>
 - **Company**: Dynamic Devices Ltd
+- **Support**: info@dynamicdevices.co.uk
 - **Issues**: [GitHub Issues](https://github.com/DynamicDevices/security-compliance-cli/issues)
 - **Documentation**: [Project Wiki](https://github.com/DynamicDevices/security-compliance-cli/wiki)
 
 ## License
 
-Copyright (c) 2025 Dynamic Devices Ltd. All rights reserved.
+**Security Compliance CLI** - Hardware security testing for embedded Linux  
+Copyright (C) 2025 Dynamic Devices Ltd
 
-This software is proprietary and confidential. See LICENSE for full terms.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+**Maintainer**: Alex J Lennon <alex@dynamicdevices.co.uk>  
+**Support**: info@dynamicdevices.co.uk  
+**Website**: https://www.dynamicdevices.co.uk
 
 ## Related Projects
 

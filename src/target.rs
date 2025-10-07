@@ -1,3 +1,9 @@
+/*
+ * Security Compliance CLI - Target System Interface
+ * Copyright (C) 2025 Dynamic Devices Ltd
+ * Licensed under GPLv3 - see LICENSE file for details
+ */
+
 use crate::{
     config::TargetConfig,
     error::{Error, Result},

@@ -18,6 +18,7 @@ pub struct TargetConfig {
     pub port: u16,
     pub user: String,
     pub password: String,
+    pub ssh_key_path: Option<String>,
     pub timeout: u64,
     pub ssh_multiplex: bool,
 }
@@ -60,6 +61,7 @@ impl Config {
         config.target.port = cli.port;
         config.target.user = cli.user.clone();
         config.target.password = cli.password.clone();
+        config.target.ssh_key_path = cli.identity_file.as_ref().map(|p| p.to_string_lossy().to_string());
         config.target.timeout = cli.timeout;
         config.output.verbose = cli.verbose;
         config.output.format = match cli.format {
@@ -106,6 +108,7 @@ impl Default for Config {
                 port: 22,
                 user: "fio".to_string(),
                 password: "fio".to_string(),
+                ssh_key_path: None,
                 timeout: 30,
                 ssh_multiplex: true,
             },

@@ -209,8 +209,8 @@ impl RuntimeSecurityTests {
         match selinux_status.stdout.trim() {
             "Enforcing" => Ok((TestStatus::Passed, "SELinux is enforcing".to_string(), Some(details.join("\n")))),
             "Permissive" => Ok((TestStatus::Warning, "SELinux is permissive (not enforcing)".to_string(), Some(details.join("\n")))),
-            "Disabled" => Ok((TestStatus::Warning, "SELinux is disabled".to_string(), Some(details.join("\n")))),
-            "not_available" => Ok((TestStatus::Skipped, "SELinux not available on this system".to_string(), None)),
+            "Disabled" => Ok((TestStatus::Failed, "SELinux is disabled - security policy not enforced".to_string(), Some(details.join("\n")))),
+            "not_available" => Ok((TestStatus::Failed, "SELinux not available on this system - install SELinux support".to_string(), None)),
             _ => Ok((TestStatus::Warning, "SELinux status unknown".to_string(), Some(details.join("\n")))),
         }
     }
@@ -517,7 +517,7 @@ impl RuntimeSecurityTests {
         }
         
         if !sudo_config.stdout.trim().is_empty() {
-            details.push(format!("Sudo config: {}", sudo_config.stdout));
+        details.push(format!("Sudo config: {}", sudo_config.stdout));
         } else {
             details.push("Sudo config: no custom sudoers files found".to_string());
         }
@@ -611,9 +611,9 @@ impl RuntimeSecurityTests {
             }
         } else {
             // x86/x64 NX bit check
-            let nx_check = target.execute_command("grep -i nx /proc/cpuinfo | head -1").await?;
-            if !nx_check.stdout.is_empty() {
-                protections.push("NX/DEP");
+        let nx_check = target.execute_command("grep -i nx /proc/cpuinfo | head -1").await?;
+        if !nx_check.stdout.is_empty() {
+            protections.push("NX/DEP");
                 details.push(format!("NX support: Available"));
             } else {
                 details.push("NX support: Not detected".to_string());
