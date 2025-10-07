@@ -411,15 +411,15 @@ impl CommunicationChannel for SerialChannel {
                         if !command_echo_seen {
                             if clean_text.contains('\n') {
                                 let lines: Vec<&str> = clean_text.lines().collect();
-                                
+
                                 // Look for the command in any line (it might be preceded by shell prompt)
                                 let mut echo_line_found = false;
                                 let mut start_index = 0;
-                                
+
                                 for (i, line) in lines.iter().enumerate() {
                                     let line_trimmed = line.trim();
                                     // Check if this line contains our command (with or without shell prompt)
-                                    if line_trimmed.contains(command.trim()) 
+                                    if line_trimmed.contains(command.trim())
                                         || line_trimmed.ends_with(command.trim())
                                         // Also check if the line ends with part of our command (for wrapped lines)
                                         || command.trim().contains(line_trimmed)
@@ -430,7 +430,7 @@ impl CommunicationChannel for SerialChannel {
                                         break;
                                     }
                                 }
-                                
+
                                 if echo_line_found && start_index < lines.len() {
                                     stdout = lines[start_index..].join("\n");
                                     command_echo_seen = true;
@@ -448,7 +448,9 @@ impl CommunicationChannel for SerialChannel {
                             } else {
                                 // Single line, check if it's just the echo
                                 let line_trimmed = clean_text.trim();
-                                if line_trimmed.contains(command.trim()) || line_trimmed.ends_with(command.trim()) {
+                                if line_trimmed.contains(command.trim())
+                                    || line_trimmed.ends_with(command.trim())
+                                {
                                     command_echo_seen = true;
                                     stdout = String::new();
                                     debug!("Single line command echo found, waiting for output");
@@ -459,13 +461,13 @@ impl CommunicationChannel for SerialChannel {
                             // We've already seen the echo, this is actual output
                             // Just append new content, being careful not to duplicate
                             let new_content = clean_text.to_string();
-                            
+
                             // If we already have some output, try to merge intelligently
                             if !stdout.is_empty() {
                                 // Check if the new content starts with part of our existing output (overlap)
                                 let existing_lines: Vec<&str> = stdout.lines().collect();
                                 let new_lines: Vec<&str> = new_content.lines().collect();
-                                
+
                                 // Find overlap and append only new content
                                 let mut found_overlap = false;
                                 if let Some(last_existing) = existing_lines.last() {
@@ -484,7 +486,7 @@ impl CommunicationChannel for SerialChannel {
                                         }
                                     }
                                 }
-                                
+
                                 if !found_overlap {
                                     // No overlap found, just append
                                     if !new_content.trim().is_empty() {
@@ -498,7 +500,7 @@ impl CommunicationChannel for SerialChannel {
                                 // First output after echo, just use it
                                 stdout = new_content;
                             }
-                            
+
                             debug!("Accumulated output: {:?}", stdout);
                         }
 
@@ -506,17 +508,24 @@ impl CommunicationChannel for SerialChannel {
                         // Only check for prompt in the current output, not in the echo
                         let has_prompt = if command_echo_seen {
                             // Only look for prompt in the actual output, not the raw text
-                            let output_to_check = if stdout.is_empty() { &clean_text } else { &stdout };
-                            
+                            let output_to_check = if stdout.is_empty() {
+                                &clean_text
+                            } else {
+                                &stdout
+                            };
+
                             output_to_check.ends_with(&shell_prompt)
                                 || output_to_check.ends_with("$ ")
                                 || output_to_check.ends_with("# ")
-                                || (output_to_check.contains(&shell_prompt) && output_to_check.lines().last().map_or(false, |line| {
-                                    line.trim().ends_with("$") || line.trim().ends_with("#")
-                                }))
-                                || clean_text.lines().last().map_or(false, |line| {
+                                || (output_to_check.contains(&shell_prompt)
+                                    && output_to_check.lines().last().is_some_and(|line| {
+                                        line.trim().ends_with("$") || line.trim().ends_with("#")
+                                    }))
+                                || clean_text.lines().last().is_some_and(|line| {
                                     let trimmed = line.trim();
-                                    trimmed.ends_with("$ ") || trimmed.ends_with("# ") || trimmed.ends_with(&shell_prompt)
+                                    trimmed.ends_with("$ ")
+                                        || trimmed.ends_with("# ")
+                                        || trimmed.ends_with(&shell_prompt)
                                 })
                         } else {
                             // If we haven't seen the echo yet, don't complete on prompt detection
@@ -528,18 +537,19 @@ impl CommunicationChannel for SerialChannel {
                             // Clean up the output by removing any trailing prompt
                             let lines: Vec<&str> = stdout.lines().collect();
                             let mut cleaned_lines = Vec::new();
-                            
+
                             for line in lines {
                                 let trimmed = line.trim();
                                 // Skip lines that are just shell prompts
-                                if !trimmed.ends_with("$ ") && !trimmed.ends_with("# ") 
+                                if !trimmed.ends_with("$ ")
+                                    && !trimmed.ends_with("# ")
                                     && !trimmed.ends_with(&shell_prompt)
-                                    && !trimmed.is_empty() 
+                                    && !trimmed.is_empty()
                                 {
                                     cleaned_lines.push(line);
                                 }
                             }
-                            
+
                             stdout = cleaned_lines.join("\n").trim().to_string();
                             debug!("Final cleaned output: {:?}", stdout);
                             break;
