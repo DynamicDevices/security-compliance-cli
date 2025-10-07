@@ -24,6 +24,7 @@ use clap::Parser;
 use security_compliance_cli::{
     cli::{Cli, Commands},
     config::Config,
+    machine::MachineDetector,
     runner::TestRunner,
     target::Target,
 };
@@ -69,6 +70,42 @@ async fn main() -> Result<()> {
             let config = Config::from_file(&config_file)?;
             println!("✅ Configuration file is valid");
             println!("{:#?}", config);
+        }
+        Commands::Detect => {
+            let mut target = Target::new(config.target)?;
+            target.connect().await?;
+            
+            let ssh_client = target.get_ssh_client();
+            let mut detector = MachineDetector::new(ssh_client);
+            
+            info!("🔍 Detecting target machine type and hardware features...");
+            let machine_info = detector.detect_machine().await?;
+            
+            println!("🖥️  Machine Detection Results");
+            println!("================================");
+            
+            if let Some(machine_type) = &machine_info.machine_type {
+                println!("✅ Detected Machine: {:?}", machine_type);
+            } else {
+                println!("❓ Machine type could not be determined");
+            }
+            
+            println!("\n📋 CPU Information:");
+            println!("{}", machine_info.cpu_info);
+            
+            if let Some(board_info) = &machine_info.board_info {
+                println!("\n🔧 Board Information:");
+                println!("{}", board_info);
+            }
+            
+            println!("\n🔍 Detected Hardware Features:");
+            for feature in &machine_info.detected_features {
+                println!("  • {}", feature);
+            }
+            
+            if machine_info.detected_features.is_empty() {
+                println!("  (No specific hardware features detected)");
+            }
         }
     }
 

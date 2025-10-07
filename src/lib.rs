@@ -22,6 +22,7 @@
 pub mod cli;
 pub mod config;
 pub mod error;
+pub mod machine;
 pub mod output;
 pub mod runner;
 pub mod ssh;

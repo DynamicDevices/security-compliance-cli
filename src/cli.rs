@@ -53,6 +53,10 @@ pub struct Cli {
     #[arg(short, long)]
     pub output: Option<PathBuf>,
 
+    /// Target machine type for hardware-specific tests
+    #[arg(short = 'm', long)]
+    pub machine: Option<MachineType>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -84,6 +88,8 @@ pub enum Commands {
         /// Configuration file to validate
         config_file: PathBuf,
     },
+    /// Detect target machine type and hardware features
+    Detect,
 }
 
 #[derive(Clone, ValueEnum)]
@@ -128,4 +134,12 @@ pub enum TestSuite {
     Production,
     /// Custom test suite from config
     Custom,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum MachineType {
+    /// i.MX93 Jaguar E-Ink platform
+    Imx93JaguarEink,
+    /// i.MX8MM Jaguar Sentai platform
+    Imx8mmJaguarSentai,
 }

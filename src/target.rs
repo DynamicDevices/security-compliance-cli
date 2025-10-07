@@ -547,6 +547,10 @@ impl Target {
         info!("Disconnecting from target");
         self.ssh_client.disconnect().await
     }
+
+    pub fn get_ssh_client(&mut self) -> &mut SshClient {
+        &mut self.ssh_client
+    }
 }
 
 #[derive(Debug, Clone, Default)]
