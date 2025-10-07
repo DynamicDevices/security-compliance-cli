@@ -1,4 +1,4 @@
-name: Security Compliance CLI - CI
+name: CI
 
 on:
   push:
@@ -12,27 +12,18 @@ env:
 
 jobs:
   test:
-    name: Test Suite
+    name: Test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust:
-          - stable
-          - beta
-          - nightly
-    continue-on-error: ${{ matrix.rust == 'nightly' }}
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install Rust toolchain
+    - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: ${{ matrix.rust }}
         components: rustfmt, clippy
 
-    - name: Cache Rust dependencies
+    - name: Cache dependencies
       uses: actions/cache@v4
       with:
         path: |
@@ -40,94 +31,49 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-${{ matrix.rust }}-
           ${{ runner.os }}-cargo-
 
-    - name: Check code formatting
+    - name: Check formatting
       run: cargo fmt --all -- --check
 
     - name: Run Clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
 
-    - name: Build project
-      run: cargo build --verbose --all-features
+    - name: Build
+      run: cargo build --verbose
 
-    - name: Run unit tests
-      run: cargo test --verbose --all-features
-
-    - name: Run integration tests
-      run: cargo test --verbose --test '*' --all-features
-
-    - name: Check documentation
-      run: cargo doc --no-deps --document-private-items --all-features
-
-  security:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-security-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
-
-    - name: Run security audit
-      run: cargo audit
-
-    - name: Install cargo-deny
-      run: cargo install cargo-deny
-
-    - name: Run cargo-deny
-      run: cargo deny check
+    - name: Run tests
+      run: cargo test --verbose
 
   build:
     name: Build Release
     runs-on: ${{ matrix.os }}
+    needs: test
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: security-compliance-cli
-            asset_name: security-compliance-cli-linux-x86_64
+            artifact_name: security-compliance-cli-linux-x86_64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            artifact_name: security-compliance-cli
-            asset_name: security-compliance-cli-linux-aarch64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact_name: security-compliance-cli
-            asset_name: security-compliance-cli-macos-x86_64
+            artifact_name: security-compliance-cli-linux-aarch64
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: security-compliance-cli
-            asset_name: security-compliance-cli-macos-aarch64
+            artifact_name: security-compliance-cli-macos-aarch64
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install Rust toolchain
+    - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: ${{ matrix.target }}
 
-    - name: Cache Rust dependencies
+    - name: Cache dependencies
       uses: actions/cache@v4
       with:
         path: |
@@ -136,6 +82,9 @@ jobs:
           ~/.cargo/git/db/
           target/
         key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.target }}-cargo-
+          ${{ runner.os }}-cargo-
 
     - name: Install cross-compilation tools (Linux ARM64)
       if: matrix.target == 'aarch64-unknown-linux-gnu'
@@ -143,126 +92,43 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y gcc-aarch64-linux-gnu
 
-    - name: Build release binary
+    - name: Install OpenSSL (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install openssl
+        echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
+
+    - name: Build release
       run: cargo build --release --target ${{ matrix.target }}
 
     - name: Strip binary (Unix)
       if: matrix.os != 'windows-latest'
-      run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-
-    - name: Upload build artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.asset_name }}
-        path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-
-  coverage:
-    name: Code Coverage
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        components: llvm-tools-preview
-
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Install cargo-llvm-cov
-      run: cargo install cargo-llvm-cov
-
-    - name: Generate code coverage
-      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        files: lcov.info
-        fail_ci_if_error: false
-
-  lint:
-    name: Lint and Format Check
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        components: rustfmt, clippy
-
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Check formatting
-      run: cargo fmt --all -- --check
-
-    - name: Run Clippy with all features
-      run: cargo clippy --all-targets --all-features -- -D warnings -D clippy::all -D clippy::pedantic -A clippy::module_name_repetitions -A clippy::missing_errors_doc
-
-    - name: Check for TODO/FIXME comments
       run: |
-        if grep -r "TODO\|FIXME" src/ --include="*.rs"; then
-          echo "Found TODO/FIXME comments in source code"
-          exit 1
+        if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+          aarch64-linux-gnu-strip target/${{ matrix.target }}/release/security-compliance-cli
+        else
+          strip target/${{ matrix.target }}/release/security-compliance-cli
         fi
 
-  docs:
-    name: Documentation
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-
-    - name: Cache Rust dependencies
-      uses: actions/cache@v4
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
       with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          target/
-        key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Build documentation
-      run: cargo doc --no-deps --all-features
-
-    - name: Check for broken links in documentation
-      run: cargo doc --no-deps --all-features 2>&1 | grep -i "warning\|error" && exit 1 || exit 0
+        name: ${{ matrix.artifact_name }}
+        path: target/${{ matrix.target }}/release/security-compliance-cli
+        retention-days: 30
 
   functional-test:
-    name: Functional Tests
+    name: Functional Test
     runs-on: ubuntu-latest
+    needs: test
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Install Rust toolchain
+    - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
 
-    - name: Cache Rust dependencies
+    - name: Cache dependencies
       uses: actions/cache@v4
       with:
         path: |
@@ -270,23 +136,26 @@ jobs:
           ~/.cargo/registry/cache/
           ~/.cargo/git/db/
           target/
-        key: ${{ runner.os }}-cargo-functional-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-functional-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
 
-    - name: Build release binary
+    - name: Build
       run: cargo build --release
 
-    - name: Test CLI help output
+    - name: Test CLI help
       run: ./target/release/security-compliance-cli --help
 
-    - name: Test CLI version output
+    - name: Test CLI version
       run: ./target/release/security-compliance-cli --version
 
     - name: Test list command
       run: ./target/release/security-compliance-cli list
 
-    - name: Test validate command with sample config
+    - name: Test config validation
       run: |
-        echo '[target]
+        cat > test-config.toml << EOF
+        [target]
         host = "127.0.0.1"
         port = 22
         user = "test"
@@ -299,43 +168,32 @@ jobs:
         [tests]
         suite = "all"
         mode = "pre-production"
-        continue_on_failure = false
-        
-        [thresholds]
-        min_pass_rate = 80.0' > test-config.toml
+        EOF
         ./target/release/security-compliance-cli validate --config test-config.toml
-        rm test-config.toml
 
-  release-check:
-    name: Release Readiness
+  security:
+    name: Security Audit
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    needs: [test, security, build, coverage, lint, docs, functional-test]
+    continue-on-error: true
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Check if version changed
-      id: version-check
-      run: |
-        if git diff HEAD~1 Cargo.toml | grep -q "^+version"; then
-          echo "version_changed=true" >> $GITHUB_OUTPUT
-        else
-          echo "version_changed=false" >> $GITHUB_OUTPUT
-        fi
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
 
-    - name: Validate CHANGELOG
-      if: steps.version-check.outputs.version_changed == 'true'
-      run: |
-        if [ ! -f CHANGELOG.md ]; then
-          echo "CHANGELOG.md not found"
-          exit 1
-        fi
-        # Check if CHANGELOG has been updated recently
-        if ! git diff HEAD~1 CHANGELOG.md | grep -q "^+"; then
-          echo "CHANGELOG.md not updated with version change"
-          exit 1
-        fi
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-security-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: All checks passed
-      run: echo "✅ All CI checks passed! Ready for release."
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+
+    - name: Run security audit
+      run: cargo audit

@@ -1,7 +1,7 @@
 use crate::{
     cli::{TestMode, TestSuite},
     error::Result,
-    target::{Target, SystemInfo},
+    target::{SystemInfo, Target},
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -10,22 +10,22 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 pub mod boot;
-pub mod hardware;
-pub mod network;
-pub mod runtime;
+pub mod certificate;
 pub mod compliance;
 pub mod container;
-pub mod certificate;
+pub mod hardware;
+pub mod network;
 pub mod production;
+pub mod runtime;
 
 pub use boot::BootSecurityTests;
-pub use hardware::HardwareSecurityTests;
-pub use network::NetworkSecurityTests;
-pub use runtime::RuntimeSecurityTests;
+pub use certificate::CertificateTests;
 pub use compliance::ComplianceTests;
 pub use container::ContainerSecurityTests;
-pub use certificate::CertificateTests;
+pub use hardware::HardwareSecurityTests;
+pub use network::NetworkSecurityTests;
 pub use production::ProductionTests;
+pub use runtime::RuntimeSecurityTests;
 
 #[async_trait]
 pub trait SecurityTest {
@@ -172,12 +172,18 @@ pub struct TestRegistry {
     tests: HashMap<String, SecurityTestEnum>,
 }
 
+impl Default for TestRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
             tests: HashMap::new(),
         };
-        
+
         // Register all test categories
         registry.register_boot_tests();
         registry.register_hardware_tests();
@@ -187,7 +193,7 @@ impl TestRegistry {
         registry.register_container_tests();
         registry.register_certificate_tests();
         registry.register_production_tests();
-        
+
         registry
     }
 
@@ -199,85 +205,183 @@ impl TestRegistry {
         self.register(SecurityTestEnum::Boot(BootSecurityTests::ModuleSigning));
         self.register(SecurityTestEnum::Boot(BootSecurityTests::OpteeSigned));
         self.register(SecurityTestEnum::Boot(BootSecurityTests::TfaSigned));
-        self.register(SecurityTestEnum::Boot(BootSecurityTests::BootChainVerification));
+        self.register(SecurityTestEnum::Boot(
+            BootSecurityTests::BootChainVerification,
+        ));
     }
 
     fn register_hardware_tests(&mut self) {
         // Hardware security tests
-        self.register(SecurityTestEnum::Hardware(HardwareSecurityTests::EdgeLockEnclave));
-        self.register(SecurityTestEnum::Hardware(HardwareSecurityTests::SecureEnclaveStatus));
-        self.register(SecurityTestEnum::Hardware(HardwareSecurityTests::HardwareRootOfTrust));
-        self.register(SecurityTestEnum::Hardware(HardwareSecurityTests::CryptoAcceleration));
-        self.register(SecurityTestEnum::Hardware(HardwareSecurityTests::RandomNumberGenerator));
+        self.register(SecurityTestEnum::Hardware(
+            HardwareSecurityTests::EdgeLockEnclave,
+        ));
+        self.register(SecurityTestEnum::Hardware(
+            HardwareSecurityTests::SecureEnclaveStatus,
+        ));
+        self.register(SecurityTestEnum::Hardware(
+            HardwareSecurityTests::HardwareRootOfTrust,
+        ));
+        self.register(SecurityTestEnum::Hardware(
+            HardwareSecurityTests::CryptoAcceleration,
+        ));
+        self.register(SecurityTestEnum::Hardware(
+            HardwareSecurityTests::RandomNumberGenerator,
+        ));
     }
 
     fn register_runtime_tests(&mut self) {
         // Runtime security tests
-        self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::FilesystemEncryption));
-        self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::FirewallActive));
-        self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::SelinuxStatus));
-        self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::SshConfiguration));
-        self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::UserPermissions));
-        self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::ServiceHardening));
-        self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::KernelProtections));
-        self.register(SecurityTestEnum::Runtime(RuntimeSecurityTests::ReadOnlyFilesystem));
+        self.register(SecurityTestEnum::Runtime(
+            RuntimeSecurityTests::FilesystemEncryption,
+        ));
+        self.register(SecurityTestEnum::Runtime(
+            RuntimeSecurityTests::FirewallActive,
+        ));
+        self.register(SecurityTestEnum::Runtime(
+            RuntimeSecurityTests::SelinuxStatus,
+        ));
+        self.register(SecurityTestEnum::Runtime(
+            RuntimeSecurityTests::SshConfiguration,
+        ));
+        self.register(SecurityTestEnum::Runtime(
+            RuntimeSecurityTests::UserPermissions,
+        ));
+        self.register(SecurityTestEnum::Runtime(
+            RuntimeSecurityTests::ServiceHardening,
+        ));
+        self.register(SecurityTestEnum::Runtime(
+            RuntimeSecurityTests::KernelProtections,
+        ));
+        self.register(SecurityTestEnum::Runtime(
+            RuntimeSecurityTests::ReadOnlyFilesystem,
+        ));
     }
 
     fn register_network_tests(&mut self) {
         // Network security tests
         self.register(SecurityTestEnum::Network(NetworkSecurityTests::OpenPorts));
-        self.register(SecurityTestEnum::Network(NetworkSecurityTests::NetworkServices));
-        self.register(SecurityTestEnum::Network(NetworkSecurityTests::WifiSecurity));
-        self.register(SecurityTestEnum::Network(NetworkSecurityTests::BluetoothSecurity));
-        self.register(SecurityTestEnum::Network(NetworkSecurityTests::NetworkEncryption));
+        self.register(SecurityTestEnum::Network(
+            NetworkSecurityTests::NetworkServices,
+        ));
+        self.register(SecurityTestEnum::Network(
+            NetworkSecurityTests::WifiSecurity,
+        ));
+        self.register(SecurityTestEnum::Network(
+            NetworkSecurityTests::BluetoothSecurity,
+        ));
+        self.register(SecurityTestEnum::Network(
+            NetworkSecurityTests::NetworkEncryption,
+        ));
     }
 
     fn register_compliance_tests(&mut self) {
         // Compliance-specific tests
-        self.register(SecurityTestEnum::Compliance(ComplianceTests::CraDataProtection));
-        self.register(SecurityTestEnum::Compliance(ComplianceTests::CraVulnerabilityManagement));
-        self.register(SecurityTestEnum::Compliance(ComplianceTests::RedSecurityRequirements));
-        self.register(SecurityTestEnum::Compliance(ComplianceTests::IncidentResponse));
+        self.register(SecurityTestEnum::Compliance(
+            ComplianceTests::CraDataProtection,
+        ));
+        self.register(SecurityTestEnum::Compliance(
+            ComplianceTests::CraVulnerabilityManagement,
+        ));
+        self.register(SecurityTestEnum::Compliance(
+            ComplianceTests::RedSecurityRequirements,
+        ));
+        self.register(SecurityTestEnum::Compliance(
+            ComplianceTests::IncidentResponse,
+        ));
         self.register(SecurityTestEnum::Compliance(ComplianceTests::AuditLogging));
     }
 
     fn register_container_tests(&mut self) {
         // Container security tests
-        self.register(SecurityTestEnum::Container(ContainerSecurityTests::DockerSecurityConfig));
-        self.register(SecurityTestEnum::Container(ContainerSecurityTests::ContainerImageSecurity));
-        self.register(SecurityTestEnum::Container(ContainerSecurityTests::RuntimeSecurity));
-        self.register(SecurityTestEnum::Container(ContainerSecurityTests::NetworkIsolation));
-        self.register(SecurityTestEnum::Container(ContainerSecurityTests::UserNamespaces));
-        self.register(SecurityTestEnum::Container(ContainerSecurityTests::SelinuxContexts));
-        self.register(SecurityTestEnum::Container(ContainerSecurityTests::SeccompProfiles));
+        self.register(SecurityTestEnum::Container(
+            ContainerSecurityTests::DockerSecurityConfig,
+        ));
+        self.register(SecurityTestEnum::Container(
+            ContainerSecurityTests::ContainerImageSecurity,
+        ));
+        self.register(SecurityTestEnum::Container(
+            ContainerSecurityTests::RuntimeSecurity,
+        ));
+        self.register(SecurityTestEnum::Container(
+            ContainerSecurityTests::NetworkIsolation,
+        ));
+        self.register(SecurityTestEnum::Container(
+            ContainerSecurityTests::UserNamespaces,
+        ));
+        self.register(SecurityTestEnum::Container(
+            ContainerSecurityTests::SelinuxContexts,
+        ));
+        self.register(SecurityTestEnum::Container(
+            ContainerSecurityTests::SeccompProfiles,
+        ));
     }
 
     fn register_certificate_tests(&mut self) {
         // Certificate management tests
-        self.register(SecurityTestEnum::Certificate(CertificateTests::X509Validation));
-        self.register(SecurityTestEnum::Certificate(CertificateTests::PkiInfrastructure));
-        self.register(SecurityTestEnum::Certificate(CertificateTests::CertificateExpiration));
-        self.register(SecurityTestEnum::Certificate(CertificateTests::CertificateChain));
-        self.register(SecurityTestEnum::Certificate(CertificateTests::CertificateRevocation));
-        self.register(SecurityTestEnum::Certificate(CertificateTests::SecureCertStorage));
-        self.register(SecurityTestEnum::Certificate(CertificateTests::CaCertManagement));
-        self.register(SecurityTestEnum::Certificate(CertificateTests::TlsCertValidation));
-        self.register(SecurityTestEnum::Certificate(CertificateTests::CertificateRotation));
-        self.register(SecurityTestEnum::Certificate(CertificateTests::ComplianceStandards));
+        self.register(SecurityTestEnum::Certificate(
+            CertificateTests::X509Validation,
+        ));
+        self.register(SecurityTestEnum::Certificate(
+            CertificateTests::PkiInfrastructure,
+        ));
+        self.register(SecurityTestEnum::Certificate(
+            CertificateTests::CertificateExpiration,
+        ));
+        self.register(SecurityTestEnum::Certificate(
+            CertificateTests::CertificateChain,
+        ));
+        self.register(SecurityTestEnum::Certificate(
+            CertificateTests::CertificateRevocation,
+        ));
+        self.register(SecurityTestEnum::Certificate(
+            CertificateTests::SecureCertStorage,
+        ));
+        self.register(SecurityTestEnum::Certificate(
+            CertificateTests::CaCertManagement,
+        ));
+        self.register(SecurityTestEnum::Certificate(
+            CertificateTests::TlsCertValidation,
+        ));
+        self.register(SecurityTestEnum::Certificate(
+            CertificateTests::CertificateRotation,
+        ));
+        self.register(SecurityTestEnum::Certificate(
+            CertificateTests::ComplianceStandards,
+        ));
     }
 
     fn register_production_tests(&mut self) {
         // Production hardening tests
-        self.register(SecurityTestEnum::Production(ProductionTests::DebugInterfacesDisabled));
-        self.register(SecurityTestEnum::Production(ProductionTests::DevelopmentToolsRemoved));
-        self.register(SecurityTestEnum::Production(ProductionTests::DefaultCredentialsChanged));
-        self.register(SecurityTestEnum::Production(ProductionTests::UnnecessaryServicesDisabled));
-        self.register(SecurityTestEnum::Production(ProductionTests::LoggingConfigured));
-        self.register(SecurityTestEnum::Production(ProductionTests::MonitoringEnabled));
-        self.register(SecurityTestEnum::Production(ProductionTests::BackupSystemsActive));
-        self.register(SecurityTestEnum::Production(ProductionTests::SecurityUpdatesEnabled));
-        self.register(SecurityTestEnum::Production(ProductionTests::NetworkHardening));
-        self.register(SecurityTestEnum::Production(ProductionTests::FileSystemHardening));
+        self.register(SecurityTestEnum::Production(
+            ProductionTests::DebugInterfacesDisabled,
+        ));
+        self.register(SecurityTestEnum::Production(
+            ProductionTests::DevelopmentToolsRemoved,
+        ));
+        self.register(SecurityTestEnum::Production(
+            ProductionTests::DefaultCredentialsChanged,
+        ));
+        self.register(SecurityTestEnum::Production(
+            ProductionTests::UnnecessaryServicesDisabled,
+        ));
+        self.register(SecurityTestEnum::Production(
+            ProductionTests::LoggingConfigured,
+        ));
+        self.register(SecurityTestEnum::Production(
+            ProductionTests::MonitoringEnabled,
+        ));
+        self.register(SecurityTestEnum::Production(
+            ProductionTests::BackupSystemsActive,
+        ));
+        self.register(SecurityTestEnum::Production(
+            ProductionTests::SecurityUpdatesEnabled,
+        ));
+        self.register(SecurityTestEnum::Production(
+            ProductionTests::NetworkHardening,
+        ));
+        self.register(SecurityTestEnum::Production(
+            ProductionTests::FileSystemHardening,
+        ));
     }
 
     fn register(&mut self, test: SecurityTestEnum) {
@@ -286,7 +390,7 @@ impl TestRegistry {
 
     pub fn get_tests_for_suite_and_mode(&self, suite: &TestSuite, mode: &TestMode) -> Vec<&str> {
         let mut test_ids = self.get_tests_for_suite(suite);
-        
+
         // Filter tests based on mode
         match mode {
             TestMode::PreProduction => {
@@ -298,7 +402,7 @@ impl TestRegistry {
                 // Production tests are mandatory in production mode
             }
         }
-        
+
         test_ids
     }
 
@@ -335,13 +439,13 @@ impl TestRegistry {
     pub fn list_tests(&self) {
         println!("Available Security Compliance Tests:");
         println!("==================================");
-        
+
         let mut categories: HashMap<String, Vec<&str>> = HashMap::new();
-        
+
         for (test_id, test) in &self.tests {
             categories
                 .entry(test.category().to_string())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(test_id);
         }
 
@@ -391,7 +495,7 @@ pub async fn check_command_success(
     expected_pattern: Option<&str>,
 ) -> Result<bool> {
     let result = target.execute_command(command).await?;
-    
+
     if result.exit_code != 0 {
         return Ok(false);
     }

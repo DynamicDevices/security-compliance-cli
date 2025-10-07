@@ -61,7 +61,10 @@ impl Config {
         config.target.port = cli.port;
         config.target.user = cli.user.clone();
         config.target.password = cli.password.clone();
-        config.target.ssh_key_path = cli.identity_file.as_ref().map(|p| p.to_string_lossy().to_string());
+        config.target.ssh_key_path = cli
+            .identity_file
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string());
         config.target.timeout = cli.timeout;
         config.output.verbose = cli.verbose;
         config.output.format = match cli.format {
@@ -79,23 +82,20 @@ impl Config {
     }
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = fs::read_to_string(path)
-            .context("Failed to read configuration file")?;
-        
+        let content = fs::read_to_string(path).context("Failed to read configuration file")?;
+
         let config: Self = toml::from_str(&content)
             .or_else(|_| serde_json::from_str(&content))
             .context("Failed to parse configuration file (expected TOML or JSON)")?;
-        
+
         Ok(config)
     }
 
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let content = toml::to_string_pretty(self)
-            .context("Failed to serialize configuration")?;
-        
-        fs::write(path, content)
-            .context("Failed to write configuration file")?;
-        
+        let content = toml::to_string_pretty(self).context("Failed to serialize configuration")?;
+
+        fs::write(path, content).context("Failed to write configuration file")?;
+
         Ok(())
     }
 }
