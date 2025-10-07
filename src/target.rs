@@ -4,14 +4,14 @@
  * Licensed under GPLv3 - see LICENSE file for details
  */
 
+#[cfg(not(target_os = "windows"))]
+use crate::serial_channel::SerialChannel;
 use crate::{
     communication::{ChannelConfig, CommunicationChannel},
     config::CommunicationConfig,
     error::{Error, Result},
     ssh_channel::SshChannel,
 };
-#[cfg(not(target_os = "windows"))]
-use crate::serial_channel::SerialChannel;
 use std::time::Duration;
 use tracing::{debug, info};
 
