@@ -18,7 +18,49 @@ pub struct CommandOutput {
 
 /// Abstract communication channel for executing commands on target systems
 #[async_trait]
+#[cfg(not(target_os = "windows"))]
 pub trait CommunicationChannel: Send + Sync {
+    /// Connect to the target system
+    async fn connect(&mut self) -> Result<()>;
+
+    /// Disconnect from the target system
+    async fn disconnect(&mut self) -> Result<()>;
+
+    /// Execute a command and return the output
+    async fn execute_command(&mut self, command: &str) -> Result<CommandOutput>;
+
+    /// Execute a command with a custom timeout
+    async fn execute_command_with_timeout(
+        &mut self,
+        command: &str,
+        timeout: Duration,
+    ) -> Result<CommandOutput>;
+
+    /// Check if the connection is still active
+    async fn is_connected(&self) -> bool;
+
+    /// Get a description of the communication channel
+    fn description(&self) -> String;
+
+    /// Upload a file to the target system (optional, not all channels support this)
+    async fn upload_file(&mut self, _local_path: &str, _remote_path: &str) -> Result<()> {
+        Err(crate::error::Error::Unsupported(
+            "File upload not supported by this communication channel".to_string(),
+        ))
+    }
+
+    /// Download a file from the target system (optional, not all channels support this)
+    async fn download_file(&mut self, _remote_path: &str, _local_path: &str) -> Result<()> {
+        Err(crate::error::Error::Unsupported(
+            "File download not supported by this communication channel".to_string(),
+        ))
+    }
+}
+
+/// Abstract communication channel for executing commands on target systems (Windows version)
+#[async_trait]
+#[cfg(target_os = "windows")]
+pub trait CommunicationChannel: Send {
     /// Connect to the target system
     async fn connect(&mut self) -> Result<()>;
 
