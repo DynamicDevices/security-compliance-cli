@@ -197,6 +197,7 @@ fn get_machine_features(machine_type: &MachineType) -> Vec<String> {
             "op-tee".to_string(),
             "tf-a".to_string(),
             "eink-display".to_string(),
+            "pcf2131-rtc".to_string(),
         ],
         MachineType::Imx8mmJaguarSentai => vec![
             "imx8mm".to_string(),
