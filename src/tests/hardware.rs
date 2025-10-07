@@ -78,11 +78,11 @@ impl SecurityTest for HardwareSecurityTests {
 
     fn description(&self) -> &str {
         match self {
-            Self::EdgeLockEnclave => "Verify i.MX93 EdgeLock Enclave is functional",
-            Self::SecureEnclaveStatus => "Check secure enclave hardware status",
-            Self::HardwareRootOfTrust => "Verify hardware root of trust implementation",
-            Self::CryptoAcceleration => "Check hardware cryptographic acceleration",
-            Self::RandomNumberGenerator => "Verify hardware random number generator",
+            Self::EdgeLockEnclave => "Validates the i.MX93 EdgeLock Enclave (ELE) hardware security module is operational. ELE provides secure key storage, cryptographic operations, and secure boot attestation. Essential for hardware-based security features and compliance with security standards.",
+            Self::SecureEnclaveStatus => "Verifies the secure enclave hardware is properly initialized and accessible. Tests enclave functionality and ensures secure world isolation is working correctly for sensitive operations like key generation and secure storage.",
+            Self::HardwareRootOfTrust => "Confirms the hardware root of trust is established and functional. Checks for secure boot fuses, OTP (One-Time Programmable) memory, and AHAB (Advanced High Assurance Boot) indicators that form the foundation of system security.",
+            Self::CryptoAcceleration => "Validates hardware cryptographic acceleration capabilities through CAAM (Cryptographic Acceleration and Assurance Module). Hardware crypto acceleration improves performance and security for encryption, decryption, and digital signature operations.",
+            Self::RandomNumberGenerator => "Ensures the hardware random number generator (TRNG - True Random Number Generator) is functional and providing sufficient entropy. Critical for cryptographic key generation, secure communications, and preventing predictable security vulnerabilities.",
         }
     }
 }

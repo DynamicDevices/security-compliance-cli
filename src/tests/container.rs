@@ -86,13 +86,13 @@ impl SecurityTest for ContainerSecurityTests {
 
     fn description(&self) -> &str {
         match self {
-            Self::DockerSecurityConfig => "Verify Docker/Podman daemon security configuration",
-            Self::ContainerImageSecurity => "Check container image security and scanning",
-            Self::RuntimeSecurity => "Verify container runtime security settings",
-            Self::NetworkIsolation => "Check network isolation and resource constraints",
-            Self::UserNamespaces => "Verify user namespaces and capability restrictions",
-            Self::SelinuxContexts => "Check SELinux contexts for containers",
-            Self::SeccompProfiles => "Verify seccomp security profiles are active",
+            Self::DockerSecurityConfig => "Validates Docker/Podman daemon security configuration including socket permissions, TLS authentication, and daemon privilege restrictions. Ensures the container runtime is hardened against privilege escalation and unauthorized access. Critical for preventing container breakout attacks and maintaining host system security.",
+            Self::ContainerImageSecurity => "Assesses container image security including signature verification, vulnerability scanning, and trusted registry usage. Validates that only signed, verified images from trusted sources are used. Essential for preventing supply chain attacks and ensuring container image integrity.",
+            Self::RuntimeSecurity => "Evaluates container runtime security features including capability restrictions, resource limits, and security profiles. Ensures containers run with minimal privileges and proper isolation. Fundamental for preventing container escape and limiting blast radius of potential compromises.",
+            Self::NetworkIsolation => "Validates container network isolation and segmentation policies. Checks for proper network namespace separation, firewall rules, and inter-container communication controls. Critical for preventing lateral movement and network-based attacks between containers and to the host system.",
+            Self::UserNamespaces => "Verifies user namespace isolation is properly configured to map container users to unprivileged host users. Prevents containers from running as root on the host system. Essential security feature for reducing the impact of container breakout vulnerabilities.",
+            Self::SelinuxContexts => "Checks SELinux mandatory access control contexts for containers to enforce fine-grained security policies. Validates that containers run with appropriate SELinux labels and restrictions. Important for defense-in-depth security and containing potential breaches.",
+            Self::SeccompProfiles => "Validates seccomp (secure computing) profiles that restrict system calls available to containers. Reduces attack surface by blocking potentially dangerous system calls. Critical for preventing privilege escalation and system compromise through container exploits.",
         }
     }
 }

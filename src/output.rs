@@ -149,6 +149,7 @@ impl OutputHandler {
         };
         println!("Overall Status: {}", overall_status);
         println!("Success Rate: {:.1}%", results.success_rate());
+        println!("Test Mode: {}", results.test_mode);
         println!();
 
         // Statistics
@@ -169,6 +170,93 @@ impl OutputHandler {
         println!("🖥️  Target System:");
         println!("  Kernel: {}", results.system_info.kernel_version);
         println!("  Uptime: {}", results.system_info.uptime);
+        
+        // Display CPU information
+        if !results.system_info.cpu_info.is_empty() {
+            println!("  CPU: {}", results.system_info.cpu_info);
+        }
+        
+        // Display memory usage
+        if !results.system_info.memory_usage.is_empty() {
+            println!("  Memory: {}", results.system_info.memory_usage);
+        }
+        
+        // Display disk usage
+        if !results.system_info.disk_usage.is_empty() {
+            println!("  Disk: {}", results.system_info.disk_usage);
+        }
+        
+        // Display power governor
+        if !results.system_info.power_governor.is_empty() {
+            println!("  Power Governor: {}", results.system_info.power_governor);
+        }
+        
+        // Parse and display OS release information
+        if !results.system_info.os_release.is_empty() {
+            // Extract key information from /etc/os-release
+            let mut os_name = String::new();
+            let mut os_version = String::new();
+            let mut os_id = String::new();
+            let mut lmp_machine = String::new();
+            let mut lmp_factory = String::new();
+            let mut lmp_factory_tag = String::new();
+            let mut image_version = String::new();
+            let mut home_url = String::new();
+            
+            for line in results.system_info.os_release.lines() {
+                if let Some((key, value)) = line.split_once('=') {
+                    let value = value.trim_matches('"');
+                    match key {
+                        "PRETTY_NAME" => os_name = value.to_string(),
+                        "VERSION" => os_version = value.to_string(),
+                        "ID" => os_id = value.to_string(),
+                        "LMP_MACHINE" => lmp_machine = value.to_string(),
+                        "LMP_FACTORY" => lmp_factory = value.to_string(),
+                        "LMP_FACTORY_TAG" => lmp_factory_tag = value.to_string(),
+                        "IMAGE_VERSION" => image_version = value.to_string(),
+                        "HOME_URL" => home_url = value.to_string(),
+                        _ => {}
+                    }
+                }
+            }
+            
+            // Display OS information
+            if !os_name.is_empty() {
+                println!("  OS: {}", os_name);
+            } else if !os_id.is_empty() && !os_version.is_empty() {
+                println!("  OS: {} {}", os_id, os_version);
+            } else if !os_id.is_empty() {
+                println!("  OS: {}", os_id);
+            }
+            
+            // Display LMP-specific information if available
+            if !lmp_machine.is_empty() {
+                println!("  LMP Machine: {}", lmp_machine);
+            }
+            if !lmp_factory.is_empty() {
+                println!("  LMP Factory: {}", lmp_factory);
+            }
+            if !lmp_factory_tag.is_empty() {
+                println!("  Factory Tag: {}", lmp_factory_tag);
+            }
+            if !image_version.is_empty() {
+                println!("  Image Version: {}", image_version);
+            }
+            if !home_url.is_empty() && home_url.contains("foundries.io") {
+                println!("  Platform: Foundries.io Linux Micro Platform");
+            }
+        }
+        
+        // Display Foundries registration status
+        if !results.system_info.foundries_registration.is_empty() {
+            println!("  Foundries Registration: {}", results.system_info.foundries_registration);
+        }
+        
+        // Display WireGuard VPN status
+        if !results.system_info.wireguard_status.is_empty() {
+            println!("  WireGuard VPN: {}", results.system_info.wireguard_status);
+        }
+        
         println!();
 
         // Failed tests details
@@ -176,6 +264,17 @@ impl OutputHandler {
             println!("{}", "❌ Failed Tests:".red().bold());
             for result in &results.results {
                 if matches!(result.status, TestStatus::Failed | TestStatus::Error) {
+                    println!("  • {} - {}: {}", result.test_id, result.test_name, result.message);
+                }
+            }
+            println!();
+        }
+
+        // Passed tests
+        if results.passed > 0 {
+            println!("{}", "✅ Passed Tests:".green().bold());
+            for result in &results.results {
+                if matches!(result.status, TestStatus::Passed) {
                     println!("  • {} - {}: {}", result.test_id, result.test_name, result.message);
                 }
             }

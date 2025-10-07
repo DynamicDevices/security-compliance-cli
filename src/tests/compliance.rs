@@ -78,11 +78,11 @@ impl SecurityTest for ComplianceTests {
 
     fn description(&self) -> &str {
         match self {
-            Self::CraDataProtection => "Verify EU CRA Article 11 data protection requirements",
-            Self::CraVulnerabilityManagement => "Check CRA vulnerability handling and patching",
-            Self::RedSecurityRequirements => "Verify UK CE RED Essential Requirements 3.3",
-            Self::IncidentResponse => "Check incident response and reporting capabilities",
-            Self::AuditLogging => "Verify security event logging and audit trails",
+            Self::CraDataProtection => "Validates compliance with EU Cyber Resilience Act (CRA) Article 11 data protection requirements. Ensures data protection by design and by default through encryption at rest, secure communications, and proper access controls. Mandatory for products sold in the EU market to meet cybersecurity certification requirements.",
+            Self::CraVulnerabilityManagement => "Verifies compliance with CRA vulnerability management obligations including vulnerability handling processes, security update mechanisms, and coordinated disclosure. Ensures the system can receive and apply security patches throughout its lifecycle as required by EU regulations.",
+            Self::RedSecurityRequirements => "Confirms compliance with UK CE RED (Radio Equipment Directive) Essential Requirements 3.3 for cybersecurity. Validates that radio equipment incorporates appropriate security features to prevent unauthorized access and protect against cyber threats. Required for CE marking of radio equipment in the UK market.",
+            Self::IncidentResponse => "Assesses incident response and security event handling capabilities required for regulatory compliance. Checks for proper logging, monitoring, and response mechanisms that enable detection and mitigation of security incidents. Essential for meeting regulatory reporting obligations and maintaining security posture.",
+            Self::AuditLogging => "Validates comprehensive security audit logging capabilities required for compliance frameworks. Ensures security events are properly logged, stored, and available for audit purposes. Critical for forensic analysis, compliance reporting, and demonstrating due diligence in security monitoring.",
         }
     }
 }
