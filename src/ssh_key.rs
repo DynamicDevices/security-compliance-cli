@@ -330,7 +330,10 @@ impl SshKeyInstaller {
             format!("echo -n > {}", authorized_keys_path)
         } else {
             // Write remaining keys
-            format!("cat > {} << 'EOF'\n{}\nEOF", authorized_keys_path, new_content)
+            format!(
+                "cat > {} << 'EOF'\n{}\nEOF",
+                authorized_keys_path, new_content
+            )
         };
 
         debug!("Writing updated authorized_keys");
@@ -346,7 +349,10 @@ impl SshKeyInstaller {
         let chmod_cmd = format!("chmod 600 {}", authorized_keys_path);
         let result = channel.execute_command(&chmod_cmd).await?;
         if result.exit_code != 0 {
-            warn!("Failed to set authorized_keys permissions: {}", result.stderr);
+            warn!(
+                "Failed to set authorized_keys permissions: {}",
+                result.stderr
+            );
         }
 
         info!("Successfully removed {} SSH keys", removed_keys.len());
@@ -360,19 +366,15 @@ impl SshKeyInstaller {
                 // Extract the key part (second field) for comparison
                 let key_parts: Vec<&str> = key_line.split_whitespace().collect();
                 let target_parts: Vec<&str> = public_key.split_whitespace().collect();
-                
+
                 if key_parts.len() >= 2 && target_parts.len() >= 2 {
                     key_parts[1] == target_parts[1] // Compare the base64 key part
                 } else {
                     false
                 }
             }
-            KeyRemovalCriteria::TempKeys => {
-                key_line.contains("security-compliance-cli-temp-key")
-            }
-            KeyRemovalCriteria::Pattern(pattern) => {
-                self.matches_pattern(key_line, pattern)
-            }
+            KeyRemovalCriteria::TempKeys => key_line.contains("security-compliance-cli-temp-key"),
+            KeyRemovalCriteria::Pattern(pattern) => self.matches_pattern(key_line, pattern),
         }
     }
 
@@ -384,7 +386,7 @@ impl SshKeyInstaller {
             if pattern_parts.len() == 2 {
                 let prefix = pattern_parts[0];
                 let suffix = pattern_parts[1];
-                
+
                 if prefix.is_empty() {
                     key_line.ends_with(suffix)
                 } else if suffix.is_empty() {
@@ -405,9 +407,14 @@ impl SshKeyInstaller {
     pub fn truncate_key_for_display(&self, key_line: &str) -> String {
         let parts: Vec<&str> = key_line.split_whitespace().collect();
         if parts.len() >= 3 {
-            format!("{}...{} {}", &parts[1][..8], &parts[1][parts[1].len()-8..], parts[2])
+            format!(
+                "{}...{} {}",
+                &parts[1][..8],
+                &parts[1][parts[1].len() - 8..],
+                parts[2]
+            )
         } else if parts.len() >= 2 {
-            format!("{}...{}", &parts[1][..8], &parts[1][parts[1].len()-8..])
+            format!("{}...{}", &parts[1][..8], &parts[1][parts[1].len() - 8..])
         } else {
             key_line.to_string()
         }
@@ -452,7 +459,10 @@ impl SshKeyInstaller {
 
     /// Extract public key from private key file
     pub fn extract_public_key_from_private(private_key_path: &Path) -> Result<String> {
-        info!("Extracting public key from private key: {}", private_key_path.display());
+        info!(
+            "Extracting public key from private key: {}",
+            private_key_path.display()
+        );
 
         // For Ed25519 keys, we need to read the private key and derive the public key
         let _private_key_content = fs::read_to_string(private_key_path).map_err(Error::Io)?;
@@ -546,10 +556,10 @@ mod tests {
     fn test_should_remove_key_temp_keys() {
         let installer = SshKeyInstaller::new("test".to_string(), false);
         let criteria = KeyRemovalCriteria::TempKeys;
-        
+
         let temp_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... security-compliance-cli-temp-key-20250107-143022 expires:2025-01-07 15:30:22 UTC";
         let regular_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... user@hostname";
-        
+
         assert!(installer.should_remove_key(temp_key, &criteria));
         assert!(!installer.should_remove_key(regular_key, &criteria));
     }
@@ -558,10 +568,10 @@ mod tests {
     fn test_should_remove_key_pattern() {
         let installer = SshKeyInstaller::new("test".to_string(), false);
         let criteria = KeyRemovalCriteria::Pattern("*temp*".to_string());
-        
+
         let matching_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... temp-key-123";
         let non_matching_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... user@hostname";
-        
+
         assert!(installer.should_remove_key(matching_key, &criteria));
         assert!(!installer.should_remove_key(non_matching_key, &criteria));
     }
@@ -569,8 +579,9 @@ mod tests {
     #[test]
     fn test_truncate_key_for_display() {
         let installer = SshKeyInstaller::new("test".to_string(), false);
-        let key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 test-comment";
-        
+        let key =
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 test-comment";
+
         let truncated = installer.truncate_key_for_display(key);
         assert!(truncated.contains("AAAAC3Nz"));
         assert!(truncated.contains("67890"));

@@ -264,7 +264,13 @@ async fn main() -> Result<()> {
                     if config.communication.channel_type == "serial" {
                         config.communication.serial_username.clone()
                     } else {
-                        Some(config.communication.user.clone().unwrap_or_else(|| "fio".to_string()))
+                        Some(
+                            config
+                                .communication
+                                .user
+                                .clone()
+                                .unwrap_or_else(|| "fio".to_string()),
+                        )
                     }
                 })
                 .unwrap_or_else(|| "root".to_string());
@@ -298,13 +304,16 @@ async fn main() -> Result<()> {
                 process::exit(1);
             };
 
-            match installer.remove_public_keys(comm_channel, &removal_criteria).await {
+            match installer
+                .remove_public_keys(comm_channel, &removal_criteria)
+                .await
+            {
                 Ok(removed_keys) => {
                     if removed_keys.is_empty() {
                         info!("ℹ️  No matching SSH keys found to remove");
                     } else {
                         info!("✅ Successfully removed {} SSH keys", removed_keys.len());
-                        
+
                         for (i, key) in removed_keys.iter().enumerate() {
                             let display_key = installer.truncate_key_for_display(key);
                             info!("  {}. {}", i + 1, display_key);

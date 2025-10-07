@@ -136,7 +136,8 @@ jobs:
     - name: Test config validation
       run: |
         cat > test-config.toml << 'EOF'
-        [target]
+        [communication]
+        channel_type = "ssh"
         host = "127.0.0.1"
         port = 22
         user = "test"
