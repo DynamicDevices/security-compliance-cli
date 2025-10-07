@@ -131,20 +131,34 @@ jobs:
 
     - name: Test config validation
       run: |
-        cat > test-config.toml << EOF
+        cat > test-config.toml << 'EOF'
         [target]
         host = "127.0.0.1"
         port = 22
         user = "test"
         password = "test"
+        ssh_key_path = "/home/test/.ssh/id_rsa"
+        timeout = 30
+        ssh_multiplex = true
         
         [output]
         format = "human"
+        file = "/tmp/output.json"
         verbose = 1
+        colors = true
         
         [tests]
         suite = "all"
         mode = "pre-production"
+        continue_on_failure = false
+        parallel = true
+        timeout_per_test = 60
+        retries = 2
+        
+        [thresholds]
+        boot_time_max_ms = 10000
+        memory_usage_max_mb = 512
+        cpu_usage_max_percent = 80.0
         EOF
         ./security-compliance-cli validate test-config.toml
 
