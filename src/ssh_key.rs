@@ -14,6 +14,19 @@ use std::fs;
 use std::path::Path;
 use tracing::{debug, info, warn};
 
+/// Information about an installed SSH key
+#[derive(Debug, Clone)]
+pub struct InstalledKeyInfo {
+    pub user: String,
+    pub key_type: String,
+    pub key_data: String,
+    pub comment: String,
+    pub line_number: usize,
+    pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub is_expired: bool,
+    pub is_temp_key: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct SshKeyPair {
     pub private_key: String,
@@ -157,17 +170,51 @@ impl SshKeyInstaller {
     ) -> Result<()> {
         info!("Installing SSH public key for user: {}", self.target_user);
 
+        // Detect current user if target_user is root (default)
+        let actual_user = if self.target_user == "root" {
+            match channel.execute_command("whoami").await {
+                Ok(result) if result.exit_code == 0 => {
+                    let detected_user = result.stdout.trim().lines().last().unwrap_or("").trim();
+                    if !detected_user.is_empty() && detected_user != "root" && !detected_user.contains('@') {
+                        info!("Detected current user: {}, installing key for this user instead of root", detected_user);
+                        detected_user.to_string()
+                    } else {
+                        info!("Could not parse user from whoami output: {:?}, using configured target: {}", result.stdout, self.target_user);
+                        self.target_user.clone()
+                    }
+                }
+                _ => {
+                    info!("Could not detect current user, using configured target: {}", self.target_user);
+                    self.target_user.clone()
+                }
+            }
+        } else {
+            self.target_user.clone()
+        };
+
+        // Determine home directory
+        let home_dir = if actual_user == "root" {
+            "/root".to_string()
+        } else {
+            format!("/home/{}", actual_user)
+        };
+
+        info!("Installing SSH key for user: {} (home: {})", actual_user, home_dir);
+
         // Ensure the .ssh directory exists
-        let create_ssh_dir = format!("mkdir -p /home/{}/.ssh", self.target_user);
+        let create_ssh_dir = format!("mkdir -p {}/.ssh", home_dir);
         debug!("Creating .ssh directory: {}", create_ssh_dir);
 
         let result = channel.execute_command(&create_ssh_dir).await?;
         if result.exit_code != 0 {
-            warn!("Failed to create .ssh directory: {}", result.stderr);
+            return Err(Error::Communication(format!(
+                "Failed to create .ssh directory: {}",
+                result.stderr
+            )));
         }
 
         // Set proper permissions on .ssh directory
-        let chmod_ssh_dir = format!("chmod 700 /home/{}/.ssh", self.target_user);
+        let chmod_ssh_dir = format!("chmod 700 {}/.ssh", home_dir);
         debug!("Setting .ssh directory permissions: {}", chmod_ssh_dir);
 
         let result = channel.execute_command(&chmod_ssh_dir).await?;
@@ -179,7 +226,7 @@ impl SshKeyInstaller {
         }
 
         // Add the public key to authorized_keys (append to avoid overwriting)
-        let authorized_keys_path = format!("/home/{}/.ssh/authorized_keys", self.target_user);
+        let authorized_keys_path = format!("{}/.ssh/authorized_keys", home_dir);
         let add_key_command = format!("echo '{}' >> {}", public_key.trim(), authorized_keys_path);
 
         debug!("Adding public key to authorized_keys");
@@ -205,8 +252,8 @@ impl SshKeyInstaller {
 
         // Set ownership of the .ssh directory and files
         let chown_command = format!(
-            "chown -R {}:{} /home/{}/.ssh",
-            self.target_user, self.target_user, self.target_user
+            "chown -R {}:{} {}/.ssh",
+            actual_user, actual_user, home_dir
         );
         debug!("Setting ownership: {}", chown_command);
 
@@ -215,7 +262,7 @@ impl SshKeyInstaller {
             warn!("Failed to set ownership: {}", result.stderr);
         }
 
-        info!("SSH public key installed successfully");
+        info!("SSH public key installed successfully for user: {}", actual_user);
         Ok(())
     }
 
@@ -525,6 +572,194 @@ impl SshKeyInstaller {
         }
 
         Ok(key_pair)
+    }
+
+    /// Check for installed SSH test keys on the target device
+    pub async fn check_ssh_keys(
+        channel: &mut dyn CommunicationChannel,
+        target_user: Option<String>,
+        detailed: bool,
+        expired_only: bool,
+        temp_keys_only: bool,
+    ) -> Result<Vec<InstalledKeyInfo>> {
+        info!("🔍 Checking for installed SSH test keys...");
+
+        // Detect current user if not specified
+        let users_to_check = if let Some(user) = target_user {
+            vec![user]
+        } else {
+            // Check current user and common locations
+            let mut users = vec!["root".to_string()];
+            match channel.execute_command("whoami").await {
+                Ok(result) if result.exit_code == 0 => {
+                    let detected_user = result.stdout.trim().lines().last().unwrap_or("").trim();
+                    if !detected_user.is_empty() && !detected_user.contains('@') && detected_user != "root" {
+                        users.push(detected_user.to_string());
+                    }
+                }
+                _ => {}
+            }
+            users
+        };
+
+        let mut all_keys = Vec::new();
+
+        for user in users_to_check {
+            let home_dir = if user == "root" {
+                "/root".to_string()
+            } else {
+                format!("/home/{}", user)
+            };
+
+            let authorized_keys_path = format!("{}/.ssh/authorized_keys", home_dir);
+            
+            debug!("Checking authorized_keys for user {}: {}", user, authorized_keys_path);
+
+            // Check if authorized_keys file exists
+            let check_command = format!("test -f {} && echo 'exists' || echo 'not_found'", authorized_keys_path);
+            match channel.execute_command(&check_command).await {
+                Ok(result) if result.exit_code == 0 && result.stdout.trim() == "exists" => {
+                    // Read the authorized_keys file
+                    let cat_command = format!("cat {}", authorized_keys_path);
+                    match channel.execute_command(&cat_command).await {
+                        Ok(result) if result.exit_code == 0 => {
+                            let keys = Self::parse_authorized_keys(&result.stdout, &user, temp_keys_only, expired_only);
+                            all_keys.extend(keys);
+                        }
+                        Ok(result) => {
+                            warn!("Failed to read {}: {}", authorized_keys_path, result.stderr);
+                        }
+                        Err(e) => {
+                            warn!("Error reading {}: {}", authorized_keys_path, e);
+                        }
+                    }
+                }
+                _ => {
+                    debug!("No authorized_keys file found for user: {}", user);
+                }
+            }
+        }
+
+        if all_keys.is_empty() {
+            info!("No SSH keys found matching the criteria");
+        } else {
+            info!("Found {} SSH key(s)", all_keys.len());
+            for key in &all_keys {
+                Self::display_key_info(key, detailed);
+            }
+        }
+
+        Ok(all_keys)
+    }
+
+    /// Parse authorized_keys content and extract key information
+    fn parse_authorized_keys(
+        content: &str,
+        user: &str,
+        temp_keys_only: bool,
+        expired_only: bool,
+    ) -> Vec<InstalledKeyInfo> {
+        let mut keys = Vec::new();
+        let now = chrono::Utc::now();
+
+        for (line_num, line) in content.lines().enumerate() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            let parts: Vec<&str> = line.splitn(3, ' ').collect();
+            if parts.len() >= 2 {
+                let key_type = parts[0];
+                let key_data = parts[1];
+                let comment = parts.get(2).unwrap_or(&"").to_string();
+
+                // Filter for temp keys if requested
+                if temp_keys_only && !comment.contains("security-compliance-cli-temp-key") {
+                    continue;
+                }
+
+                // Parse expiration from comment if present
+                let expiration = Self::parse_expiration_from_comment(&comment);
+                let is_expired = expiration.map_or(false, |exp| now > exp);
+
+                // Filter for expired keys if requested
+                if expired_only && !is_expired {
+                    continue;
+                }
+
+                let key_info = InstalledKeyInfo {
+                    user: user.to_string(),
+                    key_type: key_type.to_string(),
+                    key_data: key_data.to_string(),
+                    comment: comment.clone(),
+                    line_number: line_num + 1,
+                    expiration,
+                    is_expired,
+                    is_temp_key: comment.contains("security-compliance-cli-temp-key"),
+                };
+
+                keys.push(key_info);
+            }
+        }
+
+        keys
+    }
+
+    /// Parse expiration timestamp from key comment
+    fn parse_expiration_from_comment(comment: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+        if comment.contains("expires:") {
+            // Look for pattern like "expires:2025-10-07 15:33:25 UTC"
+            if let Some(expires_part) = comment.split("expires:").nth(1) {
+                let timestamp_str = expires_part.trim().split_whitespace().take(3).collect::<Vec<_>>().join(" ");
+                if let Ok(dt) = chrono::DateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S UTC") {
+                    return Some(dt.with_timezone(&chrono::Utc));
+                }
+            }
+        }
+        None
+    }
+
+    /// Display key information
+    fn display_key_info(key: &InstalledKeyInfo, detailed: bool) {
+        let status_icon = if key.is_expired {
+            "❌"
+        } else if key.is_temp_key {
+            "🔑"
+        } else {
+            "🗝️"
+        };
+
+        let expiration_info = if let Some(exp) = key.expiration {
+            if key.is_expired {
+                format!(" (EXPIRED: {})", exp.format("%Y-%m-%d %H:%M:%S UTC"))
+            } else {
+                format!(" (expires: {})", exp.format("%Y-%m-%d %H:%M:%S UTC"))
+            }
+        } else {
+            " (no expiration)".to_string()
+        };
+
+        info!(
+            "{} User: {} | Type: {} | Line: {}{}",
+            status_icon, key.user, key.key_type, key.line_number, expiration_info
+        );
+
+        if detailed {
+            info!("   Comment: {}", key.comment);
+            info!("   Key: {}...{}", 
+                &key.key_data[..key.key_data.len().min(20)],
+                &key.key_data[key.key_data.len().saturating_sub(20)..]
+            );
+        }
+
+        if key.is_temp_key {
+            if key.is_expired {
+                warn!("   ⚠️  This temporary test key has EXPIRED and should be removed!");
+            } else {
+                info!("   ℹ️  This is a temporary test key generated by security-compliance-cli");
+            }
+        }
     }
 }
 
