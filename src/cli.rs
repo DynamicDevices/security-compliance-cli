@@ -1,3 +1,9 @@
+/*
+ * Security Compliance CLI - Command Line Interface
+ * Copyright (C) 2025 Dynamic Devices Ltd
+ * Licensed under GPLv3 - see LICENSE file for details
+ */
+
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
@@ -22,6 +28,10 @@ pub struct Cli {
     /// SSH password
     #[arg(short = 'P', long, default_value = "fio")]
     pub password: String,
+
+    /// SSH private key file path (if not specified, tries default locations)
+    #[arg(short = 'i', long)]
+    pub identity_file: Option<PathBuf>,
 
     /// SSH connection timeout in seconds
     #[arg(long, default_value = "30")]

@@ -2,11 +2,11 @@
 name = "security-compliance-cli"
 version = "0.3.0"
 edition = "2021"
-authors = ["Alex J Lennon <ajlennon@dynamicdevices.co.uk>"]
-description = "Security compliance testing CLI for Dynamic Devices embedded systems"
+authors = ["Alex J Lennon <alex@dynamicdevices.co.uk>"]
+description = "Security compliance testing CLI for embedded Linux systems"
 homepage = "https://github.com/DynamicDevices/security-compliance-cli"
 repository = "https://github.com/DynamicDevices/security-compliance-cli"
-license = "Proprietary"
+license = "GPL-3.0-or-later"
 keywords = ["security", "compliance", "embedded", "testing", "imx93"]
 categories = ["command-line-utilities", "development-tools::testing"]
 

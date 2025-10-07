@@ -89,26 +89,86 @@ impl SecurityTest for HardwareSecurityTests {
 
 impl HardwareSecurityTests {
     async fn test_edgelock_enclave(&self, target: &mut Target) -> Result<(TestStatus, String, Option<String>)> {
-        // Check for EdgeLock Enclave in dmesg
-        let ele_check = target.execute_command("dmesg | grep -i 'ele\\|edgelock\\|s4muap'").await?;
+        let mut details = Vec::new();
+        let mut indicators = Vec::new();
+        let mut warnings = Vec::new();
+        
+        // Check for EdgeLock Enclave in dmesg with comprehensive patterns
+        let ele_dmesg = target.execute_command("dmesg | grep -i 'ele\\|edgelock\\|s4muap\\|mu.*imx93\\|sentinel'").await?;
+        if !ele_dmesg.stdout.is_empty() {
+            indicators.push("ELE kernel messages found");
+            details.push(format!("ELE dmesg output:\n{}", ele_dmesg.stdout));
+        }
         
         // Check for ELE device nodes
-        let ele_devices = target.execute_command("ls -la /dev/ | grep -i ele").await?;
+        let ele_devices = target.execute_command("ls -la /dev/ | grep -E 'ele|s4muap|mu[0-9]'").await?;
+        if !ele_devices.stdout.is_empty() {
+            indicators.push("ELE device nodes present");
+            details.push(format!("ELE devices:\n{}", ele_devices.stdout));
+        }
         
         // Check for ELE in /proc/devices
-        let ele_proc = target.execute_command("cat /proc/devices | grep -i ele").await?;
+        let ele_proc = target.execute_command("cat /proc/devices | grep -i 'ele\\|s4muap'").await?;
+        if !ele_proc.stdout.is_empty() {
+            indicators.push("ELE in proc devices");
+            details.push(format!("ELE proc devices:\n{}", ele_proc.stdout));
+        }
         
-        let mut details = Vec::new();
-        details.push(format!("ELE dmesg: {}", ele_check.stdout));
-        details.push(format!("ELE devices: {}", ele_devices.stdout));
-        details.push(format!("ELE proc: {}", ele_proc.stdout));
+        // Check for i.MX93 specific ELE firmware loading
+        let ele_firmware = target.execute_command("dmesg | grep -i 'firmware.*mx93\\|mx93.*firmware\\|ahab.*mx93'").await?;
+        if !ele_firmware.stdout.is_empty() {
+            indicators.push("ELE firmware loading detected");
+            details.push(format!("ELE firmware messages:\n{}", ele_firmware.stdout));
+        }
         
-        if ele_check.stdout.contains("ELE") || ele_check.stdout.contains("s4muap") {
-            Ok((TestStatus::Passed, "EdgeLock Enclave detected and active".to_string(), Some(details.join("\n"))))
-        } else if !ele_devices.stdout.is_empty() || !ele_proc.stdout.is_empty() {
-            Ok((TestStatus::Warning, "ELE devices present but not confirmed active".to_string(), Some(details.join("\n"))))
+        // Check for ELE-related kernel modules
+        let ele_modules = target.execute_command("lsmod | grep -E 'imx_mu|s4|ele'").await?;
+        if !ele_modules.stdout.is_empty() {
+            indicators.push("ELE kernel modules loaded");
+            details.push(format!("ELE modules:\n{}", ele_modules.stdout));
+        }
+        
+        // Check for secure world communication
+        let secure_world = target.execute_command("dmesg | grep -i 'secure.*world\\|trustzone\\|optee.*imx'").await?;
+        if !secure_world.stdout.is_empty() {
+            indicators.push("Secure world communication active");
+            details.push(format!("Secure world messages:\n{}", secure_world.stdout));
+        }
+        
+        // Check ELE status via device tree if available
+        let dt_check = target.execute_command("find /proc/device-tree -name '*ele*' -o -name '*s4*' -o -name '*mu*' 2>/dev/null | head -5").await?;
+        if !dt_check.stdout.is_empty() {
+            indicators.push("ELE device tree entries found");
+            details.push(format!("Device tree ELE entries:\n{}", dt_check.stdout));
+        }
+        
+        // Look for ELE management tools warnings
+        let ele_tools = target.execute_command("which ele_mu_ctl simple-ele-test 2>/dev/null || echo 'tools_not_found'").await?;
+        if ele_tools.stdout.contains("tools_not_found") {
+            warnings.push("ELE management tools not installed (optional for operation)");
         } else {
-            Ok((TestStatus::Failed, "EdgeLock Enclave not detected".to_string(), Some(details.join("\n"))))
+            indicators.push("ELE management tools available");
+            details.push(format!("ELE tools: {}", ele_tools.stdout));
+        }
+        
+        // Detailed summary
+        let summary = if indicators.is_empty() {
+            "No EdgeLock Enclave indicators found".to_string()
+        } else {
+            format!("EdgeLock Enclave indicators: {}", indicators.join(", "))
+        };
+        
+        if !warnings.is_empty() {
+            details.push(format!("\nInformational notes:\n{}", warnings.join("\n")));
+        }
+        
+        // Determine status based on indicators
+        if indicators.len() >= 3 {
+            Ok((TestStatus::Passed, format!("EdgeLock Enclave active ({} indicators)", indicators.len()), Some(details.join("\n\n"))))
+        } else if indicators.len() >= 1 {
+            Ok((TestStatus::Warning, format!("ELE partially detected ({} indicators)", indicators.len()), Some(details.join("\n\n"))))
+        } else {
+            Ok((TestStatus::Failed, "EdgeLock Enclave not detected".to_string(), Some(details.join("\n\n"))))
         }
     }
 
@@ -126,7 +186,7 @@ impl HardwareSecurityTests {
         } else if !enclave_services.stdout.is_empty() {
             Ok((TestStatus::Warning, "Enclave services detected but test unavailable".to_string(), Some(details)))
         } else {
-            Ok((TestStatus::Skipped, "Secure enclave test tools not available".to_string(), Some(details)))
+            Ok((TestStatus::Failed, "Secure enclave test tools not available - install ELE management tools".to_string(), Some(details)))
         }
     }
 

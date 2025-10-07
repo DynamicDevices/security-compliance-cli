@@ -6,8 +6,9 @@ use crate::{
 use ssh2::Session;
 use std::io::Read;
 use std::net::TcpStream;
+use std::path::Path;
 use std::time::{Duration, Instant};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 pub struct SshClient {
     config: TargetConfig,
@@ -36,11 +37,21 @@ impl SshClient {
         sess.handshake()
             .map_err(|e| Error::SshConnection(format!("SSH handshake failed: {}", e)))?;
 
-        sess.userauth_password(&self.config.user, &self.config.password)
-            .map_err(|e| Error::SshAuth(format!("Password authentication failed: {}", e)))?;
-
-        if !sess.authenticated() {
-            return Err(Error::SshAuth("Authentication failed".to_string()));
+        // Try SSH key authentication first
+        if self.try_key_authentication(&mut sess)? {
+            info!("SSH key authentication successful to {}@{}:{}", 
+                  self.config.user, self.config.host, self.config.port);
+        } else {
+            // Fall back to password authentication
+            debug!("SSH key authentication failed, trying password authentication");
+            sess.userauth_password(&self.config.user, &self.config.password)
+                .map_err(|e| Error::SshAuth(format!("Password authentication failed: {}", e)))?;
+            
+            if !sess.authenticated() {
+                return Err(Error::SshAuth("Both key and password authentication failed".to_string()));
+            }
+            info!("SSH password authentication successful to {}@{}:{}", 
+                  self.config.user, self.config.host, self.config.port);
         }
 
         debug!("SSH connection established to {}@{}:{}", 
@@ -48,6 +59,70 @@ impl SshClient {
 
         self.session = Some(sess);
         Ok(())
+    }
+
+    fn try_key_authentication(&self, session: &mut Session) -> Result<bool> {
+        // Try specified key path first
+        if let Some(key_path) = &self.config.ssh_key_path {
+            debug!("Trying SSH key authentication with specified key: {}", key_path);
+            if self.try_key_file(session, key_path)? {
+                return Ok(true);
+            }
+        }
+
+        // Try default key locations
+        let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/home/user".to_string());
+        let default_keys = [
+            format!("{}/.ssh/test_ed25519", home_dir),  // Our test key
+            format!("{}/.ssh/id_ed25519", home_dir),
+            format!("{}/.ssh/id_rsa", home_dir),
+            format!("{}/.ssh/id_ecdsa", home_dir),
+        ];
+
+        for key_path in &default_keys {
+            if Path::new(key_path).exists() {
+                debug!("Trying SSH key authentication with: {}", key_path);
+                if self.try_key_file(session, key_path)? {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    fn try_key_file(&self, session: &mut Session, key_path: &str) -> Result<bool> {
+        let public_key_path = format!("{}.pub", key_path);
+        
+        // Try public key authentication first (if public key exists)
+        if Path::new(&public_key_path).exists() {
+            match session.userauth_pubkey_file(&self.config.user, Some(Path::new(&public_key_path)), Path::new(key_path), None) {
+                Ok(()) => {
+                    if session.authenticated() {
+                        debug!("SSH key authentication successful with key: {}", key_path);
+                        return Ok(true);
+                    }
+                }
+                Err(e) => {
+                    debug!("SSH key authentication failed with key {}: {}", key_path, e);
+                }
+            }
+        } else {
+            // Try with just private key (let SSH figure out the public key)
+            match session.userauth_pubkey_file(&self.config.user, None, Path::new(key_path), None) {
+                Ok(()) => {
+                    if session.authenticated() {
+                        debug!("SSH key authentication successful with key: {}", key_path);
+                        return Ok(true);
+                    }
+                }
+                Err(e) => {
+                    debug!("SSH key authentication failed with key {}: {}", key_path, e);
+                }
+            }
+        }
+
+        Ok(false)
     }
 
     pub async fn execute_command(&mut self, command: &str) -> Result<CommandResult> {

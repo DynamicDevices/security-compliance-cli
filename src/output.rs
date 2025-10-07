@@ -259,17 +259,6 @@ impl OutputHandler {
         
         println!();
 
-        // Failed tests details
-        if results.failed > 0 || results.errors > 0 {
-            println!("{}", "❌ Failed Tests:".red().bold());
-            for result in &results.results {
-                if matches!(result.status, TestStatus::Failed | TestStatus::Error) {
-                    println!("  • {} - {}: {}", result.test_id, result.test_name, result.message);
-                }
-            }
-            println!();
-        }
-
         // Passed tests
         if results.passed > 0 {
             println!("{}", "✅ Passed Tests:".green().bold());
@@ -286,6 +275,17 @@ impl OutputHandler {
             println!("{}", "⚠️  Warnings:".yellow().bold());
             for result in &results.results {
                 if matches!(result.status, TestStatus::Warning) {
+                    println!("  • {} - {}: {}", result.test_id, result.test_name, result.message);
+                }
+            }
+            println!();
+        }
+
+        // Failed tests details
+        if results.failed > 0 || results.errors > 0 {
+            println!("{}", "❌ Failed Tests:".red().bold());
+            for result in &results.results {
+                if matches!(result.status, TestStatus::Failed | TestStatus::Error) {
                     println!("  • {} - {}: {}", result.test_id, result.test_name, result.message);
                 }
             }

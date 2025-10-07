@@ -1,3 +1,9 @@
+/*
+ * Security Compliance CLI - Test Runner
+ * Copyright (C) 2025 Dynamic Devices Ltd
+ * Licensed under GPLv3 - see LICENSE file for details
+ */
+
 use crate::{
     cli::{TestMode, TestSuite},
     config::OutputConfig,
@@ -8,7 +14,7 @@ use crate::{
 };
 use chrono::Utc;
 use std::time::Instant;
-use tracing::{info, warn, error};
+use tracing::{info, error};
 
 pub struct TestRunner {
     target: Target,
@@ -79,23 +85,18 @@ impl TestRunner {
                 match result.status {
                     TestStatus::Passed => {
                         passed += 1;
-                        info!("✅ {} PASSED: {}", result.test_id, result.message);
                     }
                     TestStatus::Failed => {
                         failed += 1;
-                        error!("❌ {} FAILED: {}", result.test_id, result.message);
                     }
                     TestStatus::Warning => {
                         warnings += 1;
-                        warn!("⚠️  {} WARNING: {}", result.test_id, result.message);
                     }
                     TestStatus::Skipped => {
                         skipped += 1;
-                        info!("⏭️  {} SKIPPED: {}", result.test_id, result.message);
                     }
                     TestStatus::Error => {
                         errors += 1;
-                        error!("💥 {} ERROR: {}", result.test_id, result.message);
                     }
                 }
                 
