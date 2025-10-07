@@ -411,68 +411,137 @@ impl CommunicationChannel for SerialChannel {
                         if !command_echo_seen {
                             if clean_text.contains('\n') {
                                 let lines: Vec<&str> = clean_text.lines().collect();
-                                // Find the line that contains our command (echo)
+                                
+                                // Look for the command in any line (it might be preceded by shell prompt)
+                                let mut echo_line_found = false;
                                 let mut start_index = 0;
+                                
                                 for (i, line) in lines.iter().enumerate() {
-                                    if line.trim().contains(command.trim())
-                                        || line.trim().ends_with(command.trim())
+                                    let line_trimmed = line.trim();
+                                    // Check if this line contains our command (with or without shell prompt)
+                                    if line_trimmed.contains(command.trim()) 
+                                        || line_trimmed.ends_with(command.trim())
+                                        // Also check if the line ends with part of our command (for wrapped lines)
+                                        || command.trim().contains(line_trimmed)
                                     {
-                                        start_index = i + 1; // Start after the echo line
+                                        echo_line_found = true;
+                                        start_index = i + 1; // Start collecting output from the next line
+                                        debug!("Found command echo at line {}: {:?}", i, line);
                                         break;
                                     }
                                 }
-
-                                if start_index < lines.len() {
+                                
+                                if echo_line_found && start_index < lines.len() {
                                     stdout = lines[start_index..].join("\n");
                                     command_echo_seen = true;
                                     debug!("Command echo stripped, remaining output: {:?}", stdout);
+                                } else if echo_line_found {
+                                    // Echo found but no output yet, mark as seen and continue
+                                    command_echo_seen = true;
+                                    stdout = String::new();
+                                    debug!("Command echo found, waiting for output");
                                 } else {
                                     // No echo found yet, wait for more data
+                                    debug!("Command echo not found yet, waiting for more data");
                                     continue;
                                 }
+                            } else {
+                                // Single line, check if it's just the echo
+                                let line_trimmed = clean_text.trim();
+                                if line_trimmed.contains(command.trim()) || line_trimmed.ends_with(command.trim()) {
+                                    command_echo_seen = true;
+                                    stdout = String::new();
+                                    debug!("Single line command echo found, waiting for output");
+                                }
+                                continue;
                             }
                         } else {
-                            // We've already seen the echo, accumulate the rest
-                            let lines: Vec<&str> = clean_text.lines().collect();
-                            // Find where our previous output ended and continue from there
-                            if let Some(last_stdout_line) = stdout.lines().last() {
-                                if let Some(pos) = lines
-                                    .iter()
-                                    .position(|&line| line.trim() == last_stdout_line.trim())
-                                {
-                                    if pos + 1 < lines.len() {
-                                        let new_lines = &lines[pos + 1..];
-                                        stdout.push('\n');
-                                        stdout.push_str(&new_lines.join("\n"));
+                            // We've already seen the echo, this is actual output
+                            // Just append new content, being careful not to duplicate
+                            let new_content = clean_text.to_string();
+                            
+                            // If we already have some output, try to merge intelligently
+                            if !stdout.is_empty() {
+                                // Check if the new content starts with part of our existing output (overlap)
+                                let existing_lines: Vec<&str> = stdout.lines().collect();
+                                let new_lines: Vec<&str> = new_content.lines().collect();
+                                
+                                // Find overlap and append only new content
+                                let mut found_overlap = false;
+                                if let Some(last_existing) = existing_lines.last() {
+                                    for (i, new_line) in new_lines.iter().enumerate() {
+                                        if new_line.trim() == last_existing.trim() {
+                                            // Found overlap, append everything after this line
+                                            if i + 1 < new_lines.len() {
+                                                let remaining_lines = &new_lines[i + 1..];
+                                                if !remaining_lines.is_empty() {
+                                                    stdout.push('\n');
+                                                    stdout.push_str(&remaining_lines.join("\n"));
+                                                }
+                                            }
+                                            found_overlap = true;
+                                            break;
+                                        }
                                     }
-                                } else {
-                                    // Fallback: just use the clean text
-                                    stdout = clean_text.to_string();
+                                }
+                                
+                                if !found_overlap {
+                                    // No overlap found, just append
+                                    if !new_content.trim().is_empty() {
+                                        if !stdout.ends_with('\n') {
+                                            stdout.push('\n');
+                                        }
+                                        stdout.push_str(&new_content);
+                                    }
                                 }
                             } else {
-                                stdout = clean_text.to_string();
+                                // First output after echo, just use it
+                                stdout = new_content;
                             }
+                            
+                            debug!("Accumulated output: {:?}", stdout);
                         }
 
                         // Check if we've reached the shell prompt (command completed)
-                        // Be more flexible with prompt detection
-                        let has_prompt = clean_text.ends_with(&shell_prompt)
-                            || clean_text.contains(&shell_prompt)
-                            || clean_text.ends_with("$ ")
-                            || clean_text.ends_with("# ")
-                            || clean_text.contains("$ ")
-                            || clean_text.contains("# ");
+                        // Only check for prompt in the current output, not in the echo
+                        let has_prompt = if command_echo_seen {
+                            // Only look for prompt in the actual output, not the raw text
+                            let output_to_check = if stdout.is_empty() { &clean_text } else { &stdout };
+                            
+                            output_to_check.ends_with(&shell_prompt)
+                                || output_to_check.ends_with("$ ")
+                                || output_to_check.ends_with("# ")
+                                || (output_to_check.contains(&shell_prompt) && output_to_check.lines().last().map_or(false, |line| {
+                                    line.trim().ends_with("$") || line.trim().ends_with("#")
+                                }))
+                                || clean_text.lines().last().map_or(false, |line| {
+                                    let trimmed = line.trim();
+                                    trimmed.ends_with("$ ") || trimmed.ends_with("# ") || trimmed.ends_with(&shell_prompt)
+                                })
+                        } else {
+                            // If we haven't seen the echo yet, don't complete on prompt detection
+                            false
+                        };
 
                         if has_prompt {
                             debug!("Shell prompt detected, command completed");
-                            // Remove any prompt from the output
-                            for prompt_pattern in ["$ ", "# ", &shell_prompt] {
-                                if let Some(pos) = stdout.rfind(prompt_pattern) {
-                                    stdout.truncate(pos);
-                                    break;
+                            // Clean up the output by removing any trailing prompt
+                            let lines: Vec<&str> = stdout.lines().collect();
+                            let mut cleaned_lines = Vec::new();
+                            
+                            for line in lines {
+                                let trimmed = line.trim();
+                                // Skip lines that are just shell prompts
+                                if !trimmed.ends_with("$ ") && !trimmed.ends_with("# ") 
+                                    && !trimmed.ends_with(&shell_prompt)
+                                    && !trimmed.is_empty() 
+                                {
+                                    cleaned_lines.push(line);
                                 }
                             }
-                            stdout = stdout.trim().to_string();
+                            
+                            stdout = cleaned_lines.join("\n").trim().to_string();
+                            debug!("Final cleaned output: {:?}", stdout);
                             break;
                         }
                     }
