@@ -1,11 +1,12 @@
 use crate::{
     error::Result,
     target::Target,
-    tests::{create_test_result, check_command_success, SecurityTest, TestResult, TestStatus},
+    tests::{create_test_result, SecurityTest, TestResult, TestStatus},
 };
 use async_trait::async_trait;
 use std::time::Instant;
 
+#[derive(Debug, Clone)]
 pub enum RuntimeSecurityTests {
     FilesystemEncryption,
     FirewallActive,
@@ -132,7 +133,7 @@ impl RuntimeSecurityTests {
         let iptables = target.execute_command("iptables -L -n").await?;
         
         // Check if iptables service is running
-        let iptables_service = target.execute_command("systemctl is-active iptables 2>/dev/null || echo 'not_running'").await?;
+        let _iptables_service = target.execute_command("systemctl is-active iptables 2>/dev/null || echo 'not_running'").await?;
         
         // Check for netfilter modules
         let netfilter_modules = target.execute_command("lsmod | grep -E 'iptable|netfilter|nf_'").await?;
@@ -158,7 +159,7 @@ impl RuntimeSecurityTests {
         let selinux_config = target.execute_command("cat /etc/selinux/config 2>/dev/null || echo 'not_found'").await?;
         
         // Check if SELinux filesystem is mounted
-        let selinux_fs = target.execute_command("mount | grep selinux").await?;
+        let _selinux_fs = target.execute_command("mount | grep selinux").await?;
         
         let mut details = Vec::new();
         details.push(format!("SELinux status: {}", selinux_status.stdout.trim()));
@@ -178,7 +179,7 @@ impl RuntimeSecurityTests {
         let ssh_config = target.execute_command("cat /etc/ssh/sshd_config | grep -E '^[^#]*(PermitRootLogin|PasswordAuthentication|Protocol|Port)'").await?;
         
         // Check SSH service status
-        let ssh_status = target.execute_command("systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null || echo 'not_running'").await?;
+        let _ssh_status = target.execute_command("systemctl is-active ssh 2>/dev/null || systemctl is-active sshd 2>/dev/null || echo 'not_running'").await?;
         
         let mut security_issues = Vec::new();
         let mut security_good = Vec::new();

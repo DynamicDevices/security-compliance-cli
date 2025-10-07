@@ -1,4 +1,4 @@
-use crate::cli::{Cli, OutputFormat, TestSuite};
+use crate::cli::{Cli, OutputFormat};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -33,6 +33,7 @@ pub struct OutputConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestConfig {
     pub suite: String,
+    pub mode: String,
     pub continue_on_failure: bool,
     pub parallel: bool,
     pub timeout_per_test: u64,
@@ -116,6 +117,7 @@ impl Default for Config {
             },
             tests: TestConfig {
                 suite: "all".to_string(),
+                mode: "pre-production".to_string(),
                 continue_on_failure: false,
                 parallel: false,
                 timeout_per_test: 60,

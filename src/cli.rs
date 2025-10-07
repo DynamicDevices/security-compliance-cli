@@ -55,6 +55,10 @@ pub enum Commands {
         #[arg(short, long, default_value = "all")]
         test_suite: TestSuite,
 
+        /// Testing mode (pre-production or production)
+        #[arg(short, long, default_value = "pre-production")]
+        mode: TestMode,
+
         /// Continue on test failure
         #[arg(long)]
         continue_on_failure: bool,
@@ -84,7 +88,15 @@ pub enum OutputFormat {
     Markdown,
 }
 
-#[derive(Clone, ValueEnum)]
+#[derive(Clone, Debug, ValueEnum)]
+pub enum TestMode {
+    /// Pre-production mode (less strict, allows warnings)
+    PreProduction,
+    /// Production mode (strict compliance checking)
+    Production,
+}
+
+#[derive(Clone, Debug, ValueEnum)]
 pub enum TestSuite {
     /// Run all security compliance tests
     All,
@@ -98,6 +110,12 @@ pub enum TestSuite {
     Network,
     /// Compliance tests (CRA, RED specific)
     Compliance,
+    /// Container security tests
+    Container,
+    /// Certificate management tests
+    Certificate,
+    /// Production hardening tests
+    Production,
     /// Custom test suite from config
     Custom,
 }

@@ -1,11 +1,12 @@
 use crate::{
     error::Result,
     target::Target,
-    tests::{create_test_result, check_command_success, SecurityTest, TestResult, TestStatus},
+    tests::{create_test_result, SecurityTest, TestResult, TestStatus},
 };
 use async_trait::async_trait;
 use std::time::Instant;
 
+#[derive(Debug, Clone)]
 pub enum BootSecurityTests {
     SecureBootEnabled,
     UBootSigned,
@@ -149,7 +150,7 @@ impl BootSecurityTests {
 
     async fn test_module_signing(&self, target: &mut Target) -> Result<(TestStatus, String, Option<String>)> {
         // Check if module signing is enabled
-        let modsign_check = target.execute_command("cat /proc/sys/kernel/modules_disabled 2>/dev/null || echo '0'").await?;
+        let _modsign_check = target.execute_command("cat /proc/sys/kernel/modules_disabled 2>/dev/null || echo '0'").await?;
         
         // Check for module signature verification in dmesg
         let module_sig = target.execute_command("dmesg | grep -i 'module.*sign\\|x509.*cert\\|Factory kernel module signing key'").await?;

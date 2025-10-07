@@ -4,7 +4,7 @@ use crate::{
     target::CommandResult,
 };
 use ssh2::Session;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::net::TcpStream;
 use std::time::{Duration, Instant};
 use tracing::{debug, warn};
@@ -100,7 +100,7 @@ impl SshClient {
     }
 
     pub async fn disconnect(&mut self) -> Result<()> {
-        if let Some(mut session) = self.session.take() {
+        if let Some(session) = self.session.take() {
             session.disconnect(None, "Disconnecting", None)
                 .map_err(|e| Error::SshConnection(format!("Failed to disconnect: {}", e)))?;
         }

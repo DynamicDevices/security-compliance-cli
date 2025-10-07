@@ -1,10 +1,10 @@
 use crate::{
-    cli::TestSuite,
+    cli::{TestMode, TestSuite},
     config::OutputConfig,
     error::Result,
     output::OutputHandler,
     target::Target,
-    tests::{TestRegistry, TestSuiteResults, TestStatus},
+    tests::{SecurityTest, TestRegistry, TestSuiteResults, TestStatus},
 };
 use chrono::Utc;
 use std::time::Instant;
@@ -14,10 +14,11 @@ pub struct TestRunner {
     target: Target,
     output_handler: OutputHandler,
     registry: TestRegistry,
+    test_mode: TestMode,
 }
 
 impl TestRunner {
-    pub fn new(target: Target, output_config: OutputConfig) -> Result<Self> {
+    pub fn new(target: Target, output_config: OutputConfig, test_mode: TestMode) -> Result<Self> {
         let output_handler = OutputHandler::new(output_config)?;
         let registry = TestRegistry::new();
         
@@ -25,11 +26,12 @@ impl TestRunner {
             target,
             output_handler,
             registry,
+            test_mode,
         })
     }
 
     pub async fn run_tests(&mut self, test_suite: &TestSuite) -> Result<TestSuiteResults> {
-        info!("Starting security compliance test suite: {:?}", test_suite);
+        info!("Starting security compliance test suite: {:?} in {:?} mode", test_suite, self.test_mode);
         
         let start_time = Instant::now();
         
@@ -40,8 +42,8 @@ impl TestRunner {
         let system_info = self.target.get_system_info().await?;
         info!("Target system: {}", system_info.uname);
         
-        // Get tests for the suite
-        let test_ids = self.registry.get_tests_for_suite(test_suite);
+        // Get tests for the suite, filtered by mode
+        let test_ids = self.registry.get_tests_for_suite_and_mode(test_suite, &self.test_mode);
         info!("Running {} tests", test_ids.len());
         
         let mut results = Vec::new();

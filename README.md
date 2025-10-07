@@ -10,12 +10,16 @@ A comprehensive security compliance testing tool for Dynamic Devices embedded sy
 - Hardware security (EdgeLock Enclave, crypto acceleration)
 - Network security (port scanning, service hardening)
 - Compliance verification (EU CRA, UK CE RED)
+- Container security (Docker/Podman, isolation, namespaces)
+- Certificate management (PKI, X.509, TLS validation)
+- Production hardening (debug disabled, monitoring, backups)
 
 🎯 **Automated Compliance Checking**
 - EU Cyber Resilience Act (CRA) Article 11 data protection
 - UK CE Radio Equipment Directive (RED) Essential Requirements 3.3
 - Automated vulnerability management verification
 - Incident response capability assessment
+- Testing modes: Pre-production and Production
 
 📊 **Multiple Output Formats**
 - Human-readable with colors and progress bars
@@ -48,11 +52,17 @@ cargo install --path .
 ### Basic Usage
 
 ```bash
-# Run all security compliance tests
-security-compliance-cli test --host 192.168.0.36 --user fio --password fio
+# Run all security compliance tests in pre-production mode
+security-compliance-cli test --host 192.168.0.36 --user fio --password fio --mode pre-production
+
+# Run all tests in production mode (strict compliance)
+security-compliance-cli test --host 192.168.0.36 --mode production
 
 # Run specific test suite
 security-compliance-cli test --test-suite boot --host 192.168.0.36
+
+# Run container security tests
+security-compliance-cli test --test-suite container --host 192.168.0.36
 
 # Generate JSON report
 security-compliance-cli test --format json --output results.json
@@ -102,6 +112,39 @@ security-compliance-cli list
 - **compliance_004**: Incident Response Capability
 - **compliance_005**: Security Audit Logging
 
+### 🐳 Container Security Tests
+- **container_001**: Docker/Podman Security Configuration
+- **container_002**: Container Image Security
+- **container_003**: Runtime Security
+- **container_004**: Network Isolation
+- **container_005**: User Namespaces
+- **container_006**: SELinux Contexts
+- **container_007**: Seccomp Profiles
+
+### 🔐 Certificate Management Tests
+- **certificate_001**: X.509 Certificate Validation
+- **certificate_002**: PKI Infrastructure Assessment
+- **certificate_003**: Certificate Expiration Monitoring
+- **certificate_004**: Certificate Chain Validation
+- **certificate_005**: Certificate Revocation (CRL/OCSP)
+- **certificate_006**: Secure Certificate Storage
+- **certificate_007**: CA Certificate Management
+- **certificate_008**: TLS Certificate Validation
+- **certificate_009**: Certificate Rotation Mechanisms
+- **certificate_010**: Certificate Compliance Standards
+
+### 🏭 Production Hardening Tests
+- **production_001**: Debug Interfaces Disabled
+- **production_002**: Development Tools Removed
+- **production_003**: Default Credentials Changed
+- **production_004**: Unnecessary Services Disabled
+- **production_005**: Production Logging Configured
+- **production_006**: System Monitoring Enabled
+- **production_007**: Backup Systems Active
+- **production_008**: Security Updates Enabled
+- **production_009**: Network Hardening Applied
+- **production_010**: Filesystem Hardening Applied
+
 ## Configuration
 
 ### Command Line Options
@@ -124,6 +167,12 @@ Commands:
   test      Run security compliance tests
   list      List available tests
   validate  Validate configuration file
+
+Test Command Options:
+  -t, --test-suite <SUITE>    Test suite to run [default: all] [possible values: all, boot, runtime, hardware, network, compliance, container, certificate, production, custom]
+  -m, --mode <MODE>           Testing mode [default: pre-production] [possible values: pre-production, production]
+      --continue-on-failure   Continue on test failure
+      --detailed-report       Generate detailed report
 ```
 
 ### Configuration File
@@ -146,6 +195,7 @@ colors = true
 
 [tests]
 suite = "all"
+mode = "pre-production"
 continue_on_failure = false
 parallel = false
 timeout_per_test = 60
@@ -165,28 +215,31 @@ cpu_usage_max_percent = 80.0
 🔒 Security Compliance Testing
 ================================
 Suite: All
-Tests: 27
+Tests: 64
+Mode: Pre-Production
 
 ✅ boot_001 - Secure Boot Enabled: AHAB secure boot detected
 ✅ boot_002 - U-Boot Signature Verification: FIT image verification active
 ❌ runtime_001 - Filesystem Encryption (LUKS): No filesystem encryption detected
 ⚠️  network_001 - Open Network Ports: Some security concerns (8 ports, 1 risky)
+✅ container_001 - Docker Security Configuration: Container security configured (2 features)
+✅ certificate_001 - X.509 Validation: X.509 validation infrastructure ready
 
 📊 Test Results Summary
 ======================
 
 Overall Status: FAILED
-Success Rate: 85.2%
+Success Rate: 89.1%
 
 📈 Statistics:
-  Total Tests: 27
-  ✅ Passed: 23
-  ❌ Failed: 2
-  ⚠️  Warnings: 2
+  Total Tests: 64
+  ✅ Passed: 57
+  ❌ Failed: 3
+  ⚠️  Warnings: 4
   ⏭️  Skipped: 0
   💥 Errors: 0
 
-⏱️  Duration: 45.2s
+⏱️  Duration: 78.5s
 
 ❌ Failed Tests:
   • runtime_001 - Filesystem Encryption (LUKS): No filesystem encryption detected
@@ -198,10 +251,10 @@ Success Rate: 85.2%
 ```json
 {
   "suite_name": "All",
-  "total_tests": 27,
-  "passed": 23,
-  "failed": 2,
-  "warnings": 2,
+  "total_tests": 64,
+  "passed": 57,
+  "failed": 3,
+  "warnings": 4,
   "skipped": 0,
   "errors": 0,
   "duration": {

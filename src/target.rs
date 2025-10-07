@@ -80,7 +80,7 @@ pub struct CommandResult {
     pub duration: Duration,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SystemInfo {
     pub uname: String,
     pub uptime: String,

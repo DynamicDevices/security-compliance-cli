@@ -3,13 +3,11 @@ use crate::{
     error::Result,
     tests::{TestResult, TestSuiteResults, TestStatus},
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use colored::*;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde_json;
 use std::fs;
-use std::io::{self, Write};
-use std::path::Path;
 
 pub struct OutputHandler {
     config: OutputConfig,

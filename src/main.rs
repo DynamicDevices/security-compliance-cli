@@ -25,9 +25,9 @@ async fn main() -> Result<()> {
     info!("Target: {}:{}", config.target.host, config.target.port);
 
     match cli.command {
-        Commands::Test { test_suite, .. } => {
+        Commands::Test { test_suite, mode, .. } => {
             let target = Target::new(config.target)?;
-            let mut runner = TestRunner::new(target, config.output)?;
+            let mut runner = TestRunner::new(target, config.output, mode)?;
             
             let results = runner.run_tests(&test_suite).await?;
             

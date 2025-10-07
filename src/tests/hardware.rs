@@ -6,6 +6,7 @@ use crate::{
 use async_trait::async_trait;
 use std::time::Instant;
 
+#[derive(Debug, Clone)]
 pub enum HardwareSecurityTests {
     EdgeLockEnclave,
     SecureEnclaveStatus,
