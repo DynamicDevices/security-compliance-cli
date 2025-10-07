@@ -29,7 +29,7 @@ use security_compliance_cli::{
     target::Target,
 };
 use std::process;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Load configuration
-    let config = Config::from_cli(&cli)?;
+    let mut config = Config::from_cli(&cli)?;
 
     info!("Security Compliance CLI v{}", env!("CARGO_PKG_VERSION"));
     info!("Target: {}:{}", config.target.host, config.target.port);
@@ -50,8 +50,37 @@ async fn main() -> Result<()> {
         Commands::Test {
             test_suite, mode, ..
         } => {
-            let target = Target::new(config.target)?;
-            let mut runner = TestRunner::new(target, config.output, mode)?;
+            let mut target = Target::new(config.target.clone())?;
+            target.connect().await?;
+
+            // Perform machine detection if auto-detect is enabled
+            if let Some(machine_config) = &config.machine {
+                if machine_config.auto_detect {
+                    info!("🔍 Auto-detecting target machine type...");
+                    let ssh_client = target.get_ssh_client();
+                    let mut detector = MachineDetector::new(ssh_client);
+                    
+                    match detector.detect_machine().await {
+                        Ok(machine_info) => {
+                            config.update_machine_config(
+                                machine_info.machine_type.clone(),
+                                machine_info.detected_features.clone()
+                            );
+                            
+                            if let Some(detected_type) = &machine_info.machine_type {
+                                info!("✅ Detected machine: {:?}", detected_type);
+                            } else {
+                                info!("❓ Could not determine specific machine type, using generic tests");
+                            }
+                        }
+                        Err(e) => {
+                            warn!("⚠️  Machine detection failed: {}. Using generic tests.", e);
+                        }
+                    }
+                }
+            }
+
+            let mut runner = TestRunner::new(target, config.output.clone(), mode, config.machine.clone())?;
 
             let results = runner.run_tests(&test_suite).await?;
 
