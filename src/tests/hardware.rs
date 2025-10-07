@@ -399,7 +399,9 @@ impl HardwareSecurityTests {
         let i2c_detect = target
             .execute_command("i2cdetect -y 0 2>/dev/null | grep -E '51|UU' || i2cdetect -y 1 2>/dev/null | grep -E '51|UU' || echo 'no_i2c'")
             .await?;
-        if !i2c_detect.stdout.contains("no_i2c") && (i2c_detect.stdout.contains("51") || i2c_detect.stdout.contains("UU")) {
+        if !i2c_detect.stdout.contains("no_i2c")
+            && (i2c_detect.stdout.contains("51") || i2c_detect.stdout.contains("UU"))
+        {
             rtc_indicators.push("I2C device at address 0x51");
             details.push(format!("I2C detection: {}", i2c_detect.stdout.trim()));
         }
@@ -468,7 +470,10 @@ impl HardwareSecurityTests {
         match rtc_indicators.len() {
             4.. => Ok((
                 TestStatus::Passed,
-                format!("PCF2131 RTC fully functional: {}", rtc_indicators.join(", ")),
+                format!(
+                    "PCF2131 RTC fully functional: {}",
+                    rtc_indicators.join(", ")
+                ),
                 details_str,
             )),
             2..=3 => Ok((
@@ -478,7 +483,10 @@ impl HardwareSecurityTests {
             )),
             1 => Ok((
                 TestStatus::Warning,
-                format!("Partial PCF2131 RTC detection: {}", rtc_indicators.join(", ")),
+                format!(
+                    "Partial PCF2131 RTC detection: {}",
+                    rtc_indicators.join(", ")
+                ),
                 details_str,
             )),
             _ => Ok((
@@ -501,34 +509,48 @@ impl HardwareSecurityTests {
         let usb_controllers = target
             .execute_command("lsusb -t 2>/dev/null || echo 'lsusb_not_available'")
             .await?;
-        
-        let usb_devices = target
-            .execute_command("lsusb 2>/dev/null | wc -l")
-            .await?;
-        
+
+        let usb_devices = target.execute_command("lsusb 2>/dev/null | wc -l").await?;
+
         let device_count: usize = usb_devices.stdout.trim().parse().unwrap_or(0);
         details.push(format!("USB devices detected: {}", device_count));
-        
+
         if !usb_controllers.stdout.contains("lsusb_not_available") {
             security_features.push("USB enumeration working");
-            details.push(format!("USB topology: {}", usb_controllers.stdout.lines().take(3).collect::<Vec<_>>().join("; ")));
+            details.push(format!(
+                "USB topology: {}",
+                usb_controllers
+                    .stdout
+                    .lines()
+                    .take(3)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
         }
 
         // Check for USB security modules/drivers
         let usb_security_modules = target
             .execute_command("lsmod | grep -E 'usbguard|usb.*security|usb.*auth' || echo 'no_usb_security_modules'")
             .await?;
-        
-        if !usb_security_modules.stdout.contains("no_usb_security_modules") {
+
+        if !usb_security_modules
+            .stdout
+            .contains("no_usb_security_modules")
+        {
             security_features.push("USB security modules loaded");
-            details.push(format!("USB security modules: {}", usb_security_modules.stdout.trim()));
+            details.push(format!(
+                "USB security modules: {}",
+                usb_security_modules.stdout.trim()
+            ));
         }
 
         // Check USB configuration and permissions
         let usb_permissions = target
-            .execute_command("ls -la /dev/bus/usb/*/* 2>/dev/null | head -5 || echo 'no_usb_devices'")
+            .execute_command(
+                "ls -la /dev/bus/usb/*/* 2>/dev/null | head -5 || echo 'no_usb_devices'",
+            )
             .await?;
-        
+
         if !usb_permissions.stdout.contains("no_usb_devices") {
             // Check if USB devices have restrictive permissions
             if usb_permissions.stdout.contains("crw-rw----") {
@@ -536,45 +558,64 @@ impl HardwareSecurityTests {
             } else if usb_permissions.stdout.contains("crw-rw-rw-") {
                 security_issues.push("USB devices have world-writable permissions");
             }
-            details.push(format!("USB device permissions: {}", usb_permissions.stdout.lines().take(2).collect::<Vec<_>>().join("; ")));
+            details.push(format!(
+                "USB device permissions: {}",
+                usb_permissions
+                    .stdout
+                    .lines()
+                    .take(2)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
         }
 
         // Check for USB host/device mode configuration
         let usb_mode_check = target
             .execute_command("find /sys/class/udc -name '*' 2>/dev/null | head -3")
             .await?;
-        
+
         if !usb_mode_check.stdout.is_empty() {
             security_features.push("USB device mode capability");
-            details.push(format!("USB device controllers: {}", usb_mode_check.stdout.lines().count()));
+            details.push(format!(
+                "USB device controllers: {}",
+                usb_mode_check.stdout.lines().count()
+            ));
         }
 
         // Check for USB OTG configuration
         let usb_otg = target
-            .execute_command("dmesg | grep -i 'otg\\|usb.*host.*device' | head -2 || echo 'no_otg_messages'")
+            .execute_command(
+                "dmesg | grep -i 'otg\\|usb.*host.*device' | head -2 || echo 'no_otg_messages'",
+            )
             .await?;
-        
+
         if !usb_otg.stdout.contains("no_otg_messages") {
             security_features.push("USB OTG configuration detected");
-            details.push(format!("USB OTG: {}", usb_otg.stdout.lines().take(1).collect::<Vec<_>>().join("")));
+            details.push(format!(
+                "USB OTG: {}",
+                usb_otg.stdout.lines().take(1).collect::<Vec<_>>().join("")
+            ));
         }
 
         // Check for USB storage restrictions
         let usb_storage_policy = target
             .execute_command("cat /proc/sys/kernel/modules_disabled 2>/dev/null || echo '0'")
             .await?;
-        
+
         let modules_disabled: u32 = usb_storage_policy.stdout.trim().parse().unwrap_or(0);
         if modules_disabled == 1 {
             security_features.push("Kernel module loading disabled (USB storage protection)");
         }
-        details.push(format!("Module loading disabled: {}", modules_disabled == 1));
+        details.push(format!(
+            "Module loading disabled: {}",
+            modules_disabled == 1
+        ));
 
         // Check for USB mass storage devices
         let usb_storage = target
             .execute_command("lsusb | grep -i 'mass storage\\|storage' | wc -l")
             .await?;
-        
+
         let storage_devices: usize = usb_storage.stdout.trim().parse().unwrap_or(0);
         if storage_devices > 0 {
             security_issues.push("USB storage devices detected (potential data exfiltration risk)");
@@ -585,10 +626,11 @@ impl HardwareSecurityTests {
         let usb_hid = target
             .execute_command("lsusb | grep -i 'keyboard\\|mouse\\|hid' | wc -l")
             .await?;
-        
+
         let hid_devices: usize = usb_hid.stdout.trim().parse().unwrap_or(0);
         if hid_devices > 2 {
-            security_issues.push("Multiple USB HID devices detected (review for unauthorized devices)");
+            security_issues
+                .push("Multiple USB HID devices detected (review for unauthorized devices)");
         }
         details.push(format!("USB HID devices: {}", hid_devices));
 
@@ -596,7 +638,7 @@ impl HardwareSecurityTests {
         let usb_autosuspend = target
             .execute_command("find /sys/bus/usb/devices -name 'autosuspend' -exec cat {} \\; 2>/dev/null | head -3")
             .await?;
-        
+
         if !usb_autosuspend.stdout.is_empty() {
             security_features.push("USB power management configured");
             details.push("USB autosuspend: configured".to_string());
@@ -615,19 +657,28 @@ impl HardwareSecurityTests {
         if issue_count > 2 || (issue_count > 0 && feature_count < 2) {
             Ok((
                 TestStatus::Failed,
-                format!("USB security issues detected: {}", security_issues.join(", ")),
+                format!(
+                    "USB security issues detected: {}",
+                    security_issues.join(", ")
+                ),
                 details_str,
             ))
         } else if issue_count > 0 || feature_count < 3 {
             Ok((
                 TestStatus::Warning,
-                format!("USB security needs attention: {} features, {} issues", feature_count, issue_count),
+                format!(
+                    "USB security needs attention: {} features, {} issues",
+                    feature_count, issue_count
+                ),
                 details_str,
             ))
         } else {
             Ok((
                 TestStatus::Passed,
-                format!("USB security configuration good: {}", security_features.join(", ")),
+                format!(
+                    "USB security configuration good: {}",
+                    security_features.join(", ")
+                ),
                 details_str,
             ))
         }
