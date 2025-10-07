@@ -227,6 +227,12 @@ impl TestRegistry {
         self.register(SecurityTestEnum::Hardware(
             HardwareSecurityTests::RandomNumberGenerator,
         ));
+        self.register(SecurityTestEnum::Hardware(
+            HardwareSecurityTests::Pcf2131Rtc,
+        ));
+        self.register(SecurityTestEnum::Hardware(
+            HardwareSecurityTests::UsbSecurity,
+        ));
     }
 
     fn register_runtime_tests(&mut self) {
@@ -254,6 +260,9 @@ impl TestRegistry {
         ));
         self.register(SecurityTestEnum::Runtime(
             RuntimeSecurityTests::ReadOnlyFilesystem,
+        ));
+        self.register(SecurityTestEnum::Runtime(
+            RuntimeSecurityTests::FoundriesLmpSecurity,
         ));
     }
 

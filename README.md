@@ -1,18 +1,19 @@
 # Security Compliance CLI
 
-A comprehensive security compliance testing tool for Dynamic Devices embedded systems, specifically designed for i.MX93-based devices running Foundries.io Linux Micro Platform.
+A comprehensive security compliance testing tool for embedded Linux systems, with specialized support for i.MX93 and i.MX8MM platforms running Foundries.io Linux Micro Platform. Features cross-platform SSH key management, serial console communication, and automated compliance reporting.
 
 ## Features
 
 🔒 **Comprehensive Security Testing**
 - Boot security (Secure Boot, AHAB, signature verification)
 - Runtime security (filesystem encryption, firewall, SELinux)
-- Hardware security (EdgeLock Enclave, crypto acceleration)
+- Hardware security (EdgeLock Enclave, CAAM, PCF2131 RTC)
 - Network security (port scanning, service hardening)
 - Compliance verification (EU CRA, UK CE RED)
 - Container security (Docker/Podman, isolation, namespaces)
 - Certificate management (PKI, X.509, TLS validation)
 - Production hardening (debug disabled, monitoring, backups)
+- Machine-specific testing (auto-detection of platform features)
 
 🎓 **Educational Verbose Mode**
 - Detailed test descriptions explaining security concepts
@@ -32,10 +33,16 @@ A comprehensive security compliance testing tool for Dynamic Devices embedded sy
 - JSON for programmatic processing
 - JUnit XML for CI/CD integration
 - Markdown reports for documentation
+- EU CRA compliance reports
+- UK CE RED compliance reports
+- PDF reports for formal documentation
 
 🚀 **Easy Integration**
-- SSH-based remote testing
-- Configurable test suites
+- SSH-based remote testing (Linux, macOS, Windows)
+- Serial console communication (Linux, macOS)
+- SSH key management (generate, install, verify, remove)
+- Machine auto-detection (i.MX93 E-Ink, i.MX8MM Sentai)
+- Configurable test suites with platform filtering
 - Parallel test execution support
 - Detailed logging and audit trails
 
@@ -57,56 +64,66 @@ cargo install --path .
 
 ### Board Setup
 
-Before running tests, you need to configure SSH access to your target board. See [docs/SSH_SETUP.md](docs/SSH_SETUP.md) for detailed instructions on:
+The tool supports both SSH and serial console communication:
 
-- Setting up SSH keys for secure access
-- Configuring the board for remote testing
-- Installing test credentials for development
-
-For quick setup, you can use the automated scripts:
-
+#### SSH Setup (Recommended)
 ```bash
-# Install test SSH key to local system (~/.ssh/)
-./scripts/install-test-key.sh
+# Install SSH key via serial console (Linux/macOS)
+security-compliance-cli --serial-device /dev/ttyUSB0 install-ssh-key --key-validity-hours 2
 
-# Then configure the board using the commands from SSH_SETUP.md
-# Copy and paste the setup commands into your board's serial terminal
+# Or manually configure SSH access
+ssh-copy-id fio@192.168.0.36
 ```
 
-The install script will:
-- Copy test keys to your local `~/.ssh/` directory
-- Add SSH config entries for easy board access
-- Set proper file permissions automatically
+#### Serial Console Setup
+```bash
+# Direct serial communication (Linux/macOS only)
+security-compliance-cli --serial-device /dev/ttyUSB0 --serial-username fio test
+
+# Windows users should use SSH instead
+security-compliance-cli --host 192.168.0.36 --user fio test
+```
+
+See [docs/SSH_KEY_INSTALLATION.md](docs/SSH_KEY_INSTALLATION.md) for detailed SSH key management and [docs/SERIAL_SETUP.md](docs/SERIAL_SETUP.md) for serial console configuration.
 
 ### Basic Usage
 
+#### SSH Communication (All Platforms)
 ```bash
-# Run all security compliance tests using SSH key authentication (recommended)
-security-compliance-cli --host 192.168.0.36 --user fio test --mode pre-production
+# Run tests with SSH key authentication (recommended)
+security-compliance-cli --host 192.168.0.36 --user fio test
 
-# Run tests with verbose output to understand what each test does
+# Run with machine auto-detection
 security-compliance-cli --host 192.168.0.36 --user fio test --verbose
 
-# Run tests with maximum verbosity (includes test categories)
-security-compliance-cli --host 192.168.0.36 --user fio test -vv
+# Run specific machine tests
+security-compliance-cli --host 192.168.0.36 --user fio --machine imx93-jaguar-eink test
 
-# Run tests with explicit SSH key path
-security-compliance-cli --host 192.168.0.36 --user fio --identity-file ~/.ssh/test_ed25519 test
+# Generate compliance reports
+security-compliance-cli --host 192.168.0.36 test --format cra --output cra-report.md
+security-compliance-cli --host 192.168.0.36 test --format red --output red-report.md
+security-compliance-cli --host 192.168.0.36 test --format pdf --output report.pdf
+```
 
-# Run tests with password authentication (fallback)
-security-compliance-cli --host 192.168.0.36 --user fio --password fio test --mode pre-production
+#### Serial Console Communication (Linux/macOS)
+```bash
+# Direct serial testing
+security-compliance-cli --serial-device /dev/ttyUSB0 --serial-username fio test
 
-# Run all tests in production mode (strict compliance)
-security-compliance-cli --host 192.168.0.36 --user fio test --mode production
+# Install SSH key via serial
+security-compliance-cli --serial-device /dev/ttyUSB0 install-ssh-key --key-validity-hours 2
 
-# Run specific test suite
-security-compliance-cli test --test-suite boot --host 192.168.0.36
+# Check installed keys
+security-compliance-cli --serial-device /dev/ttyUSB0 check-ssh-keys --detailed
 
-# Run container security tests
-security-compliance-cli test --test-suite container --host 192.168.0.36
+# Remove test keys
+security-compliance-cli --serial-device /dev/ttyUSB0 uninstall-ssh-key --remove-temp-keys
+```
 
-# Generate JSON report
-security-compliance-cli test --format json --output results.json
+#### Machine Detection
+```bash
+# Auto-detect platform and run appropriate tests
+security-compliance-cli --host 192.168.0.36 detect
 
 # List available tests
 security-compliance-cli list
@@ -132,13 +149,15 @@ security-compliance-cli list
 - **runtime_006**: Service Hardening
 - **runtime_007**: Kernel Security Protections
 - **runtime_008**: Read-Only Filesystem Protection
+- **runtime_009**: PCF2131 RTC Security (i.MX93 E-Ink)
 
 ### 🔧 Hardware Security Tests
 - **hardware_001**: EdgeLock Enclave (ELE)
 - **hardware_002**: Secure Enclave Status
 - **hardware_003**: Hardware Root of Trust
-- **hardware_004**: Crypto Hardware Acceleration
+- **hardware_004**: Crypto Hardware Acceleration (CAAM)
 - **hardware_005**: Hardware RNG
+- **hardware_006**: PCF2131 RTC Validation (i.MX93 E-Ink)
 
 ### 🌐 Network Security Tests
 - **network_001**: Open Network Ports
@@ -194,27 +213,37 @@ security-compliance-cli list
 ```bash
 security-compliance-cli [OPTIONS] <COMMAND>
 
-Options:
+🌐 SSH Communication:
   -H, --host <HOST>           Target IP address [default: 192.168.0.36]
   -p, --port <PORT>           Target SSH port [default: 22]
   -u, --user <USER>           SSH username [default: fio]
-  -P, --password <PASSWORD>   SSH password [default: fio]
-      --timeout <TIMEOUT>     SSH connection timeout in seconds [default: 30]
-  -f, --format <FORMAT>       Output format [default: human] [possible values: human, json, junit, markdown]
+  -P, --password <PASSWORD>   SSH password
+      --timeout <TIMEOUT>     Connection timeout [default: 30]
+
+📺 Serial Communication (Linux/macOS):
+      --serial-device <DEV>   Serial device path (e.g., /dev/ttyUSB0)
+      --baud-rate <RATE>      Serial baud rate [default: 115200]
+      --serial-username <U>   Serial login username
+      --serial-password <P>   Serial login password
+
+🖥️ Machine Detection:
+  -m, --machine <MACHINE>     Target machine type [auto-detect]
+                              [possible values: imx93-jaguar-eink, imx8mm-jaguar-sentai]
+
+📊 Output Options:
+  -f, --format <FORMAT>       Output format [possible values: human, json, junit, markdown, cra, red, pdf]
   -v, --verbose               Verbose output (can be used multiple times)
-  -c, --config <CONFIG>       Configuration file
   -o, --output <OUTPUT>       Output file for results
+  -c, --config <CONFIG>       Configuration file
 
 Commands:
-  test      Run security compliance tests
-  list      List available tests
-  validate  Validate configuration file
-
-Test Command Options:
-  -t, --test-suite <SUITE>    Test suite to run [default: all] [possible values: all, boot, runtime, hardware, network, compliance, container, certificate, production, custom]
-  -m, --mode <MODE>           Testing mode [default: pre-production] [possible values: pre-production, production]
-      --continue-on-failure   Continue on test failure
-      --detailed-report       Generate detailed report
+  test                Run security compliance tests
+  list                List available tests
+  detect              Detect target machine type and features
+  validate            Validate configuration file
+  install-ssh-key     Install SSH key via serial console
+  uninstall-ssh-key   Remove SSH keys from target
+  check-ssh-keys      Check installed SSH test keys
 ```
 
 ### Configuration File
@@ -222,7 +251,8 @@ Test Command Options:
 Create a `config.toml` file for persistent settings:
 
 ```toml
-[target]
+[communication]
+channel_type = "ssh"  # or "serial"
 host = "192.168.0.36"
 port = 22
 user = "fio"
@@ -230,8 +260,21 @@ password = "fio"
 timeout = 30
 ssh_multiplex = true
 
+# Serial configuration (Linux/macOS only)
+serial_device = "/dev/ttyUSB0"
+baud_rate = 115200
+serial_username = "fio"
+serial_password = "fio"
+serial_login_prompt = "login:"
+serial_password_prompt = "Password:"
+serial_shell_prompt = "$ "
+
+[machine]
+auto_detect = true
+machine_type = "imx93-jaguar-eink"  # optional override
+
 [output]
-format = "human"
+format = "human"  # human, json, junit, markdown, cra, red, pdf
 verbose = 1
 colors = true
 
@@ -438,10 +481,21 @@ impl SecurityTest for MyTests {
 
 ## Hardware Requirements
 
-- **Target Platform**: i.MX93-based devices (imx93-jaguar-eink)
+### Supported Platforms
+- **i.MX93 E-Ink Jaguar**: EdgeLock Enclave, CAAM, PCF2131 RTC
+- **i.MX8MM Sentai Jaguar**: TrustZone, OP-TEE, CAAM
+- **Generic ARM64**: Basic security testing
+
+### System Requirements
 - **Operating System**: Foundries.io Linux Micro Platform v95+
-- **Network**: SSH access (port 22) with credentials
-- **Minimum System Requirements**: 512MB RAM, 1GB storage
+- **Network**: SSH access (port 22) or Serial console
+- **Memory**: 512MB RAM minimum, 1GB storage
+- **Serial**: USB-to-serial adapter for console access (Linux/macOS)
+
+### Host Platform Support
+- **Linux**: Full functionality (SSH + Serial)
+- **macOS**: Full functionality (SSH + Serial)
+- **Windows**: SSH only (Serial not supported due to thread safety)
 
 ## Security Features Tested
 
@@ -463,9 +517,11 @@ impl SecurityTest for MyTests {
 
 ### Hardware Security
 - ✅ i.MX93 EdgeLock Enclave (ELE)
+- ✅ i.MX8MM TrustZone and OP-TEE
 - ✅ Hardware root of trust
 - ✅ Cryptographic acceleration (CAAM)
 - ✅ Hardware random number generator
+- ✅ PCF2131 RTC validation (E-Ink platform)
 - ✅ Secure key storage
 
 ### Network Security
@@ -494,17 +550,32 @@ ping 192.168.0.36
 # Test SSH manually
 ssh fio@192.168.0.36
 
+# Install SSH key via serial
+security-compliance-cli --serial-device /dev/ttyUSB0 install-ssh-key
+
 # Use verbose mode for debugging
 security-compliance-cli test --verbose --host 192.168.0.36
 ```
 
-**Permission Denied**:
+**Serial Connection Issues**:
 ```bash
-# Ensure SSH key is properly configured
-ssh-copy-id fio@192.168.0.36
+# Check serial device permissions
+ls -la /dev/ttyUSB*
+sudo usermod -a -G dialout $USER  # Add user to dialout group
 
-# Or use password authentication
-security-compliance-cli test --password your_password
+# Test serial connection
+security-compliance-cli --serial-device /dev/ttyUSB0 --verbose check-ssh-keys
+
+# Try different baud rates
+security-compliance-cli --serial-device /dev/ttyUSB0 --baud-rate 9600 test
+```
+
+**Windows Serial Support**:
+```bash
+# Windows users should use SSH instead of serial
+security-compliance-cli --host 192.168.0.36 --user fio test
+
+# SSH key management on Windows requires WSL or third-party tools
 ```
 
 **Test Timeouts**:
@@ -514,6 +585,9 @@ security-compliance-cli test --timeout 60
 
 # Run specific test suite only
 security-compliance-cli test --test-suite boot
+
+# Use machine-specific tests
+security-compliance-cli --machine imx93-jaguar-eink test
 ```
 
 ## Support
