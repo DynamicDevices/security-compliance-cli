@@ -1224,7 +1224,7 @@ impl RuntimeSecurityTests {
         let lmp_check = target
             .execute_command("cat /etc/os-release | grep -i 'linux.*micro.*platform\\|foundries'")
             .await?;
-        
+
         if lmp_check.stdout.is_empty() {
             return Ok((
                 TestStatus::Skipped,
@@ -1240,10 +1240,18 @@ impl RuntimeSecurityTests {
         let ostree_status = target
             .execute_command("ostree admin status 2>/dev/null || echo 'ostree_not_available'")
             .await?;
-        
+
         if !ostree_status.stdout.contains("ostree_not_available") {
             lmp_features.push("OSTree immutable filesystem");
-            details.push(format!("OSTree status: {}", ostree_status.stdout.lines().take(2).collect::<Vec<_>>().join("; ")));
+            details.push(format!(
+                "OSTree status: {}",
+                ostree_status
+                    .stdout
+                    .lines()
+                    .take(2)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            ));
         } else {
             security_issues.push("OSTree not detected (LMP should use immutable filesystem)");
         }
@@ -1252,7 +1260,7 @@ impl RuntimeSecurityTests {
         let ota_service = target
             .execute_command("systemctl is-active aktualizr-lite 2>/dev/null || echo 'not_active'")
             .await?;
-        
+
         if ota_service.stdout.trim() == "active" {
             lmp_features.push("OTA updates service active");
             details.push("aktualizr-lite: active".to_string());
@@ -1264,7 +1272,7 @@ impl RuntimeSecurityTests {
         let docker_info = target
             .execute_command("docker info 2>/dev/null | grep -E 'Security Options|User Namespaces' || echo 'docker_not_available'")
             .await?;
-        
+
         if !docker_info.stdout.contains("docker_not_available") {
             if docker_info.stdout.contains("seccomp") {
                 lmp_features.push("Docker seccomp security");
@@ -1274,9 +1282,11 @@ impl RuntimeSecurityTests {
 
         // Check for LMP-specific hardening
         let lmp_hardening = target
-            .execute_command("systemctl list-units --type=service | grep -E 'fioconfig|lmp-' | wc -l")
+            .execute_command(
+                "systemctl list-units --type=service | grep -E 'fioconfig|lmp-' | wc -l",
+            )
             .await?;
-        
+
         let lmp_services: usize = lmp_hardening.stdout.trim().parse().unwrap_or(0);
         if lmp_services > 0 {
             lmp_features.push("LMP-specific services");
@@ -1287,7 +1297,7 @@ impl RuntimeSecurityTests {
         let kernel_security = target
             .execute_command("cat /proc/sys/kernel/randomize_va_space 2>/dev/null")
             .await?;
-        
+
         if kernel_security.stdout.trim() == "2" {
             lmp_features.push("ASLR enabled");
         }
@@ -1296,7 +1306,7 @@ impl RuntimeSecurityTests {
         let secure_boot = target
             .execute_command("dmesg | grep -i 'secure.*boot\\|ahab\\|hab' | wc -l")
             .await?;
-        
+
         let secure_boot_msgs: usize = secure_boot.stdout.trim().parse().unwrap_or(0);
         if secure_boot_msgs > 0 {
             lmp_features.push("Secure boot indicators");
@@ -1307,7 +1317,7 @@ impl RuntimeSecurityTests {
         let factory_config = target
             .execute_command("ls -la /var/sota/sql.db /var/lib/aktualizr-lite/ 2>/dev/null | wc -l")
             .await?;
-        
+
         let config_files: usize = factory_config.stdout.trim().parse().unwrap_or(0);
         if config_files > 0 {
             lmp_features.push("Factory configuration present");
@@ -1318,7 +1328,7 @@ impl RuntimeSecurityTests {
         let user_config = target
             .execute_command("id fio 2>/dev/null && echo 'fio_user_exists' || echo 'no_fio_user'")
             .await?;
-        
+
         if user_config.stdout.contains("fio_user_exists") {
             lmp_features.push("LMP user configuration");
         }
@@ -1327,7 +1337,7 @@ impl RuntimeSecurityTests {
         let mount_security = target
             .execute_command("mount | grep -E 'ro,|nodev,|nosuid,' | wc -l")
             .await?;
-        
+
         let secure_mounts: usize = mount_security.stdout.trim().parse().unwrap_or(0);
         if secure_mounts >= 3 {
             lmp_features.push("Secure filesystem mounts");
@@ -1347,25 +1357,37 @@ impl RuntimeSecurityTests {
         if feature_count >= 6 && issue_count == 0 {
             Ok((
                 TestStatus::Passed,
-                format!("Foundries.io LMP security excellent: {}", lmp_features.join(", ")),
+                format!(
+                    "Foundries.io LMP security excellent: {}",
+                    lmp_features.join(", ")
+                ),
                 details_str,
             ))
         } else if feature_count >= 4 && issue_count <= 1 {
             Ok((
                 TestStatus::Passed,
-                format!("Foundries.io LMP security good: {} features, {} issues", feature_count, issue_count),
+                format!(
+                    "Foundries.io LMP security good: {} features, {} issues",
+                    feature_count, issue_count
+                ),
                 details_str,
             ))
         } else if feature_count >= 3 {
             Ok((
                 TestStatus::Warning,
-                format!("Foundries.io LMP security needs attention: {} features, {} issues", feature_count, issue_count),
+                format!(
+                    "Foundries.io LMP security needs attention: {} features, {} issues",
+                    feature_count, issue_count
+                ),
                 details_str,
             ))
         } else {
             Ok((
                 TestStatus::Failed,
-                format!("Foundries.io LMP security insufficient: {} features, {} issues", feature_count, issue_count),
+                format!(
+                    "Foundries.io LMP security insufficient: {} features, {} issues",
+                    feature_count, issue_count
+                ),
                 details_str,
             ))
         }
