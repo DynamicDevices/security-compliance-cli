@@ -1,7 +1,7 @@
 use crate::{
     config::OutputConfig,
     error::Result,
-    tests::{TestResult, TestSuiteResults, TestStatus},
+    tests::{TestResult, TestStatus, TestSuiteResults},
 };
 use chrono::Utc;
 use colored::*;
@@ -60,7 +60,10 @@ impl OutputHandler {
                 println!();
                 println!("**Suite:** {}", suite_name);
                 println!("**Tests:** {}", total_tests);
-                println!("**Started:** {}", Utc::now().format("%Y-%m-%d %H:%M:%S UTC"));
+                println!(
+                    "**Started:** {}",
+                    Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+                );
                 println!();
             }
             _ => {}
@@ -72,43 +75,40 @@ impl OutputHandler {
     pub async fn start_test(&mut self, test_id: &str, test_name: &str) -> Result<()> {
         self.current_test += 1;
 
-        match self.config.format.as_str() {
-            "human" => {
-                if let Some(pb) = &self.progress_bar {
-                    pb.set_message(format!("{}: {}", test_id, test_name));
-                    pb.set_position(self.current_test as u64);
-                } else if self.config.verbose > 0 {
-                    println!("🔍 [{}/{}] Running: {} - {}", 
-                             self.current_test, self.total_tests, test_id, test_name);
-                }
+        if self.config.format.as_str() == "human" {
+            if let Some(pb) = &self.progress_bar {
+                pb.set_message(format!("{}: {}", test_id, test_name));
+                pb.set_position(self.current_test as u64);
+            } else if self.config.verbose > 0 {
+                println!(
+                    "🔍 [{}/{}] Running: {} - {}",
+                    self.current_test, self.total_tests, test_id, test_name
+                );
             }
-            _ => {}
         }
 
         Ok(())
     }
 
     pub async fn complete_test(&mut self, result: &TestResult) -> Result<()> {
-        match self.config.format.as_str() {
-            "human" => {
-                if self.progress_bar.is_none() || self.config.verbose > 0 {
-                    let status_icon = match result.status {
-                        TestStatus::Passed => "✅".green(),
-                        TestStatus::Failed => "❌".red(),
-                        TestStatus::Warning => "⚠️ ".yellow(),
-                        TestStatus::Skipped => "⏭️ ".blue(),
-                        TestStatus::Error => "💥".red(),
-                    };
+        if self.config.format.as_str() == "human"
+            && (self.progress_bar.is_none() || self.config.verbose > 0) {
+            let status_icon = match result.status {
+                TestStatus::Passed => "✅".green(),
+                TestStatus::Failed => "❌".red(),
+                TestStatus::Warning => "⚠️ ".yellow(),
+                TestStatus::Skipped => "⏭️ ".blue(),
+                TestStatus::Error => "💥".red(),
+            };
 
-                    println!("{} {} - {}: {}", 
-                             status_icon, result.test_id, result.test_name, result.message);
+            println!(
+                "{} {} - {}: {}",
+                status_icon, result.test_id, result.test_name, result.message
+            );
 
-                    if self.config.verbose > 1 && result.details.is_some() {
-                        println!("   Details: {}", result.details.as_ref().unwrap());
-                    }
-                }
+            if self.config.verbose > 1 && result.details.is_some() {
+                println!("   Details: {}", result.details.as_ref().unwrap());
             }
-            _ => {}
         }
 
         Ok(())
@@ -170,27 +170,27 @@ impl OutputHandler {
         println!("🖥️  Target System:");
         println!("  Kernel: {}", results.system_info.kernel_version);
         println!("  Uptime: {}", results.system_info.uptime);
-        
+
         // Display CPU information
         if !results.system_info.cpu_info.is_empty() {
             println!("  CPU: {}", results.system_info.cpu_info);
         }
-        
+
         // Display memory usage
         if !results.system_info.memory_usage.is_empty() {
             println!("  Memory: {}", results.system_info.memory_usage);
         }
-        
+
         // Display disk usage
         if !results.system_info.disk_usage.is_empty() {
             println!("  Disk: {}", results.system_info.disk_usage);
         }
-        
+
         // Display power governor
         if !results.system_info.power_governor.is_empty() {
             println!("  Power Governor: {}", results.system_info.power_governor);
         }
-        
+
         // Parse and display OS release information
         if !results.system_info.os_release.is_empty() {
             // Extract key information from /etc/os-release
@@ -202,7 +202,7 @@ impl OutputHandler {
             let mut lmp_factory_tag = String::new();
             let mut image_version = String::new();
             let mut home_url = String::new();
-            
+
             for line in results.system_info.os_release.lines() {
                 if let Some((key, value)) = line.split_once('=') {
                     let value = value.trim_matches('"');
@@ -219,7 +219,7 @@ impl OutputHandler {
                     }
                 }
             }
-            
+
             // Display OS information
             if !os_name.is_empty() {
                 println!("  OS: {}", os_name);
@@ -228,7 +228,7 @@ impl OutputHandler {
             } else if !os_id.is_empty() {
                 println!("  OS: {}", os_id);
             }
-            
+
             // Display LMP-specific information if available
             if !lmp_machine.is_empty() {
                 println!("  LMP Machine: {}", lmp_machine);
@@ -246,17 +246,20 @@ impl OutputHandler {
                 println!("  Platform: Foundries.io Linux Micro Platform");
             }
         }
-        
+
         // Display Foundries registration status
         if !results.system_info.foundries_registration.is_empty() {
-            println!("  Foundries Registration: {}", results.system_info.foundries_registration);
+            println!(
+                "  Foundries Registration: {}",
+                results.system_info.foundries_registration
+            );
         }
-        
+
         // Display WireGuard VPN status
         if !results.system_info.wireguard_status.is_empty() {
             println!("  WireGuard VPN: {}", results.system_info.wireguard_status);
         }
-        
+
         println!();
 
         // Passed tests
@@ -264,7 +267,10 @@ impl OutputHandler {
             println!("{}", "✅ Passed Tests:".green().bold());
             for result in &results.results {
                 if matches!(result.status, TestStatus::Passed) {
-                    println!("  • {} - {}: {}", result.test_id, result.test_name, result.message);
+                    println!(
+                        "  • {} - {}: {}",
+                        result.test_id, result.test_name, result.message
+                    );
                 }
             }
             println!();
@@ -275,7 +281,10 @@ impl OutputHandler {
             println!("{}", "⚠️  Warnings:".yellow().bold());
             for result in &results.results {
                 if matches!(result.status, TestStatus::Warning) {
-                    println!("  • {} - {}: {}", result.test_id, result.test_name, result.message);
+                    println!(
+                        "  • {} - {}: {}",
+                        result.test_id, result.test_name, result.message
+                    );
                 }
             }
             println!();
@@ -286,7 +295,10 @@ impl OutputHandler {
             println!("{}", "❌ Failed Tests:".red().bold());
             for result in &results.results {
                 if matches!(result.status, TestStatus::Failed | TestStatus::Error) {
-                    println!("  • {} - {}: {}", result.test_id, result.test_name, result.message);
+                    println!(
+                        "  • {} - {}: {}",
+                        result.test_id, result.test_name, result.message
+                    );
                 }
             }
             println!();
@@ -303,30 +315,52 @@ impl OutputHandler {
 
     async fn output_junit(&self, results: &TestSuiteResults) -> Result<()> {
         println!(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
-        println!(r#"<testsuites name="SecurityCompliance" tests="{}" failures="{}" errors="{}" time="{:.3}">"#,
-                 results.total_tests, results.failed, results.errors, results.duration.as_secs_f64());
-        
-        println!(r#"  <testsuite name="{}" tests="{}" failures="{}" errors="{}" skipped="{}" time="{:.3}">"#,
-                 results.suite_name, results.total_tests, results.failed, results.errors, results.skipped, 
-                 results.duration.as_secs_f64());
+        println!(
+            r#"<testsuites name="SecurityCompliance" tests="{}" failures="{}" errors="{}" time="{:.3}">"#,
+            results.total_tests,
+            results.failed,
+            results.errors,
+            results.duration.as_secs_f64()
+        );
+
+        println!(
+            r#"  <testsuite name="{}" tests="{}" failures="{}" errors="{}" skipped="{}" time="{:.3}">"#,
+            results.suite_name,
+            results.total_tests,
+            results.failed,
+            results.errors,
+            results.skipped,
+            results.duration.as_secs_f64()
+        );
 
         for result in &results.results {
-            println!(r#"    <testcase name="{}" classname="{}" time="{:.3}">"#,
-                     result.test_name, result.category, result.duration.as_secs_f64());
+            println!(
+                r#"    <testcase name="{}" classname="{}" time="{:.3}">"#,
+                result.test_name,
+                result.category,
+                result.duration.as_secs_f64()
+            );
 
             match result.status {
                 TestStatus::Failed => {
-                    println!(r#"      <failure message="{}">{}</failure>"#, 
-                             xml_escape(&result.message), 
-                             xml_escape(result.details.as_deref().unwrap_or("")));
+                    println!(
+                        r#"      <failure message="{}">{}</failure>"#,
+                        xml_escape(&result.message),
+                        xml_escape(result.details.as_deref().unwrap_or(""))
+                    );
                 }
                 TestStatus::Error => {
-                    println!(r#"      <error message="{}">{}</error>"#, 
-                             xml_escape(&result.message), 
-                             xml_escape(result.details.as_deref().unwrap_or("")));
+                    println!(
+                        r#"      <error message="{}">{}</error>"#,
+                        xml_escape(&result.message),
+                        xml_escape(result.details.as_deref().unwrap_or(""))
+                    );
                 }
                 TestStatus::Skipped => {
-                    println!(r#"      <skipped message="{}"/>"#, xml_escape(&result.message));
+                    println!(
+                        r#"      <skipped message="{}"/>"#,
+                        xml_escape(&result.message)
+                    );
                 }
                 _ => {}
             }
@@ -344,7 +378,14 @@ impl OutputHandler {
         println!();
         println!("| Metric | Value |");
         println!("| ------ | ----- |");
-        println!("| **Overall Status** | {} |", if results.overall_passed() { "✅ PASSED" } else { "❌ FAILED" });
+        println!(
+            "| **Overall Status** | {} |",
+            if results.overall_passed() {
+                "✅ PASSED"
+            } else {
+                "❌ FAILED"
+            }
+        );
         println!("| **Success Rate** | {:.1}% |", results.success_rate());
         println!("| **Total Tests** | {} |", results.total_tests);
         println!("| **Passed** | ✅ {} |", results.passed);
@@ -369,8 +410,10 @@ impl OutputHandler {
                 TestStatus::Error => "💥",
             };
 
-            println!("| {} | {} | {} | {} |", 
-                     result.test_id, result.test_name, status_icon, result.message);
+            println!(
+                "| {} | {} | {} | {} |",
+                result.test_id, result.test_name, status_icon, result.message
+            );
         }
 
         Ok(())
@@ -381,17 +424,35 @@ impl OutputHandler {
             "json" => serde_json::to_string_pretty(results)?,
             "junit" => {
                 // Generate JUnit XML content
-                format!(r#"<?xml version="1.0" encoding="UTF-8"?>
+                format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
 <testsuites name="SecurityCompliance" tests="{}" failures="{}" errors="{}" time="{:.3}">
   <testsuite name="{}" tests="{}" failures="{}" errors="{}" skipped="{}" time="{:.3}">
 {}
   </testsuite>
 </testsuites>"#,
-                        results.total_tests, results.failed, results.errors, results.duration.as_secs_f64(),
-                        results.suite_name, results.total_tests, results.failed, results.errors, results.skipped, 
-                        results.duration.as_secs_f64(),
-                        results.results.iter().map(|r| format!(r#"    <testcase name="{}" classname="{}" time="{:.3}"/>"#,
-                                                               r.test_name, r.category, r.duration.as_secs_f64())).collect::<Vec<_>>().join("\n"))
+                    results.total_tests,
+                    results.failed,
+                    results.errors,
+                    results.duration.as_secs_f64(),
+                    results.suite_name,
+                    results.total_tests,
+                    results.failed,
+                    results.errors,
+                    results.skipped,
+                    results.duration.as_secs_f64(),
+                    results
+                        .results
+                        .iter()
+                        .map(|r| format!(
+                            r#"    <testcase name="{}" classname="{}" time="{:.3}"/>"#,
+                            r.test_name,
+                            r.category,
+                            r.duration.as_secs_f64()
+                        ))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
             }
             _ => format!("Security Compliance Test Results\n{:#?}", results),
         };

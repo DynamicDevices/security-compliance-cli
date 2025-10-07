@@ -22,10 +22,10 @@
 pub mod cli;
 pub mod config;
 pub mod error;
+pub mod output;
 pub mod runner;
+pub mod ssh;
 pub mod target;
 pub mod tests;
-pub mod output;
-pub mod ssh;
 
 pub use error::{Error, Result};

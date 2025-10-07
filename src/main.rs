@@ -41,17 +41,19 @@ async fn main() -> Result<()> {
 
     // Load configuration
     let config = Config::from_cli(&cli)?;
-    
+
     info!("Security Compliance CLI v{}", env!("CARGO_PKG_VERSION"));
     info!("Target: {}:{}", config.target.host, config.target.port);
 
     match cli.command {
-        Commands::Test { test_suite, mode, .. } => {
+        Commands::Test {
+            test_suite, mode, ..
+        } => {
             let target = Target::new(config.target)?;
             let mut runner = TestRunner::new(target, config.output, mode)?;
-            
+
             let results = runner.run_tests(&test_suite).await?;
-            
+
             if results.overall_passed() {
                 info!("✅ All security compliance tests PASSED");
                 process::exit(0);
