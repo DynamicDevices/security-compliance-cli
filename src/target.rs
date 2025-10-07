@@ -8,9 +8,10 @@ use crate::{
     communication::{ChannelConfig, CommunicationChannel},
     config::CommunicationConfig,
     error::{Error, Result},
-    serial_channel::SerialChannel,
     ssh_channel::SshChannel,
 };
+#[cfg(not(target_os = "windows"))]
+use crate::serial_channel::SerialChannel;
 use std::time::Duration;
 use tracing::{debug, info};
 
@@ -34,6 +35,7 @@ impl Target {
                     ssh_multiplex: config.ssh_multiplex.unwrap_or(false),
                 })?)
             }
+            #[cfg(not(target_os = "windows"))]
             ChannelConfig::Serial { .. } => {
                 Box::new(SerialChannel::from_channel_config(ChannelConfig::Serial {
                     device: config.serial_device.clone().unwrap_or_default(),
@@ -45,6 +47,12 @@ impl Target {
                     username: config.serial_username.clone(),
                     password: config.serial_password.clone(),
                 })?)
+            }
+            #[cfg(target_os = "windows")]
+            ChannelConfig::Serial { .. } => {
+                return Err(Error::Unsupported(
+                    "Serial communication is not supported on Windows due to thread safety limitations. Please use SSH instead.".to_string()
+                ));
             }
         };
 
