@@ -1,4 +1,4 @@
-use crate::cli::{Cli, OutputFormat, MachineType};
+use crate::cli::{Cli, MachineType, OutputFormat};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -92,7 +92,7 @@ impl Config {
                 MachineType::Imx93JaguarEink => "imx93-jaguar-eink".to_string(),
                 MachineType::Imx8mmJaguarSentai => "imx8mm-jaguar-sentai".to_string(),
             };
-            
+
             config.machine = Some(MachineConfig {
                 machine_type: machine_type_str,
                 auto_detect: false, // Explicitly set via CLI
@@ -129,7 +129,11 @@ impl Config {
     }
 
     /// Update machine configuration with detected information
-    pub fn update_machine_config(&mut self, machine_type: Option<MachineType>, features: Vec<String>) {
+    pub fn update_machine_config(
+        &mut self,
+        machine_type: Option<MachineType>,
+        features: Vec<String>,
+    ) {
         if let Some(machine_config) = &mut self.machine {
             if machine_config.auto_detect {
                 if let Some(detected_type) = machine_type {

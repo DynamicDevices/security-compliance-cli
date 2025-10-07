@@ -46,7 +46,9 @@ impl<'a> MachineDetector<'a> {
     async fn get_cpu_info(&mut self) -> Result<String> {
         let output = self
             .ssh_client
-            .execute_command("cat /proc/cpuinfo | grep -E '(model name|Hardware|Revision)' | head -3")
+            .execute_command(
+                "cat /proc/cpuinfo | grep -E '(model name|Hardware|Revision)' | head -3",
+            )
             .await
             .context("Failed to get CPU info")?;
         Ok(output.stdout)
@@ -160,9 +162,12 @@ impl<'a> MachineDetector<'a> {
         features: &[String],
     ) -> Option<MachineType> {
         // Check for i.MX93 Jaguar E-Ink
-        if features.contains(&"imx93".to_string()) && features.contains(&"edgelock-enclave".to_string()) {
+        if features.contains(&"imx93".to_string())
+            && features.contains(&"edgelock-enclave".to_string())
+        {
             if let Some(board) = board_info {
-                if board.to_lowercase().contains("jaguar") && board.to_lowercase().contains("eink") {
+                if board.to_lowercase().contains("jaguar") && board.to_lowercase().contains("eink")
+                {
                     return Some(MachineType::Imx93JaguarEink);
                 }
             }
@@ -177,7 +182,9 @@ impl<'a> MachineDetector<'a> {
         // Check for i.MX8MM Jaguar Sentai
         if features.contains(&"imx8mm".to_string()) {
             if let Some(board) = board_info {
-                if board.to_lowercase().contains("jaguar") && board.to_lowercase().contains("sentai") {
+                if board.to_lowercase().contains("jaguar")
+                    && board.to_lowercase().contains("sentai")
+                {
                     return Some(MachineType::Imx8mmJaguarSentai);
                 }
             }
@@ -217,22 +224,18 @@ fn is_test_compatible_with_machine(test_name: &str, machine_features: &[String])
         // Hardware tests that require specific features
         ("hardware_001", vec!["edgelock-enclave"]), // EdgeLock Enclave (ELE) - i.MX93 only
         ("hardware_002", vec!["trustzone", "op-tee"]), // Secure Enclave Status
-        ("hardware_003", vec!["secure-boot"]), // Hardware Root of Trust
-        ("hardware_004", vec!["caam"]), // Crypto Hardware Acceleration
-        ("hardware_005", vec!["caam"]), // Hardware RNG
-        ("hardware_006", vec!["pcf2131-rtc"]), // PCF2131 RTC functionality - i.MX93 E-Ink only
-        
+        ("hardware_003", vec!["secure-boot"]),      // Hardware Root of Trust
+        ("hardware_004", vec!["caam"]),             // Crypto Hardware Acceleration
+        ("hardware_005", vec!["caam"]),             // Hardware RNG
+        ("hardware_006", vec!["pcf2131-rtc"]),      // PCF2131 RTC functionality - i.MX93 E-Ink only
         // Boot tests that may be SoC-specific
         ("boot_001", vec!["secure-boot"]), // Secure Boot Enabled
-        ("boot_005", vec!["op-tee"]), // OP-TEE Signature Verification
-        ("boot_006", vec!["tf-a"]), // TF-A Signature Verification
-        
+        ("boot_005", vec!["op-tee"]),      // OP-TEE Signature Verification
+        ("boot_006", vec!["tf-a"]),        // TF-A Signature Verification
         // Runtime tests that might use RTC
         ("runtime_009", vec!["pcf2131-rtc"]), // Time synchronization and RTC accuracy
-        
         // i.MX93 specific tests
         ("hardware_001", vec!["imx93"]), // EdgeLock Enclave is i.MX93 specific
-        
         // i.MX8MM specific tests (HAB vs ELE)
         ("boot_hab_verification", vec!["imx8mm", "hab"]), // HAB verification for i.MX8MM
     ]);

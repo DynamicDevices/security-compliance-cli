@@ -6,7 +6,7 @@
 
 use crate::{
     cli::{TestMode, TestSuite},
-    config::{OutputConfig, MachineConfig},
+    config::{MachineConfig, OutputConfig},
     error::Result,
     machine::filter_tests_for_machine,
     output::OutputHandler,
@@ -27,7 +27,12 @@ pub struct TestRunner {
 }
 
 impl TestRunner {
-    pub fn new(target: Target, output_config: OutputConfig, test_mode: TestMode, machine_config: Option<MachineConfig>) -> Result<Self> {
+    pub fn new(
+        target: Target,
+        output_config: OutputConfig,
+        test_mode: TestMode,
+        machine_config: Option<MachineConfig>,
+    ) -> Result<Self> {
         let verbose = output_config.verbose;
         let output_handler = OutputHandler::new(output_config)?;
         let registry = TestRegistry::new();
@@ -64,24 +69,31 @@ impl TestRunner {
 
         // Convert to Vec<String> for machine filtering
         let test_ids_strings: Vec<String> = test_ids_raw.iter().map(|s| s.to_string()).collect();
-        
+
         // Apply machine-specific filtering
         let filtered_test_ids = filter_tests_for_machine(&test_ids_strings, &self.machine_config);
-        
+
         // Convert back to Vec<&str> for compatibility with existing code
-        let test_ids: Vec<&str> = test_ids_raw.into_iter()
+        let test_ids: Vec<&str> = test_ids_raw
+            .into_iter()
             .filter(|id| filtered_test_ids.contains(&id.to_string()))
             .collect();
-        
+
         if let Some(machine_config) = &self.machine_config {
             if !machine_config.auto_detect || machine_config.machine_type != "auto" {
-                info!("🎯 Filtered tests for machine: {}", machine_config.machine_type);
+                info!(
+                    "🎯 Filtered tests for machine: {}",
+                    machine_config.machine_type
+                );
                 if !machine_config.hardware_features.is_empty() {
-                    info!("🔧 Hardware features: {}", machine_config.hardware_features.join(", "));
+                    info!(
+                        "🔧 Hardware features: {}",
+                        machine_config.hardware_features.join(", ")
+                    );
                 }
             }
         }
-        
+
         info!("Running {} tests", test_ids.len());
 
         let mut results = Vec::new();
