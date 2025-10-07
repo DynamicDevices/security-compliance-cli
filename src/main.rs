@@ -59,14 +59,14 @@ async fn main() -> Result<()> {
                     info!("🔍 Auto-detecting target machine type...");
                     let ssh_client = target.get_ssh_client();
                     let mut detector = MachineDetector::new(ssh_client);
-                    
+
                     match detector.detect_machine().await {
                         Ok(machine_info) => {
                             config.update_machine_config(
                                 machine_info.machine_type.clone(),
-                                machine_info.detected_features.clone()
+                                machine_info.detected_features.clone(),
                             );
-                            
+
                             if let Some(detected_type) = &machine_info.machine_type {
                                 info!("✅ Detected machine: {:?}", detected_type);
                             } else {
@@ -80,7 +80,8 @@ async fn main() -> Result<()> {
                 }
             }
 
-            let mut runner = TestRunner::new(target, config.output.clone(), mode, config.machine.clone())?;
+            let mut runner =
+                TestRunner::new(target, config.output.clone(), mode, config.machine.clone())?;
 
             let results = runner.run_tests(&test_suite).await?;
 
@@ -103,35 +104,35 @@ async fn main() -> Result<()> {
         Commands::Detect => {
             let mut target = Target::new(config.target)?;
             target.connect().await?;
-            
+
             let ssh_client = target.get_ssh_client();
             let mut detector = MachineDetector::new(ssh_client);
-            
+
             info!("🔍 Detecting target machine type and hardware features...");
             let machine_info = detector.detect_machine().await?;
-            
+
             println!("🖥️  Machine Detection Results");
             println!("================================");
-            
+
             if let Some(machine_type) = &machine_info.machine_type {
                 println!("✅ Detected Machine: {:?}", machine_type);
             } else {
                 println!("❓ Machine type could not be determined");
             }
-            
+
             println!("\n📋 CPU Information:");
             println!("{}", machine_info.cpu_info);
-            
+
             if let Some(board_info) = &machine_info.board_info {
                 println!("\n🔧 Board Information:");
                 println!("{}", board_info);
             }
-            
+
             println!("\n🔍 Detected Hardware Features:");
             for feature in &machine_info.detected_features {
                 println!("  • {}", feature);
             }
-            
+
             if machine_info.detected_features.is_empty() {
                 println!("  (No specific hardware features detected)");
             }
