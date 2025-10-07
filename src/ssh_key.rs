@@ -6,10 +6,9 @@
 
 use crate::communication::CommunicationChannel;
 use crate::error::{Error, Result};
-use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Duration, Utc};
-use ed25519_dalek::SigningKey;
 use rand::rngs::OsRng;
+use ssh_key::PrivateKey;
 use std::fs;
 use std::path::Path;
 use tracing::{debug, info, warn};
@@ -67,17 +66,11 @@ impl SshKeyInstaller {
             validity_hours
         );
 
-        let mut csprng = OsRng {};
-        let signing_key = SigningKey::generate(&mut csprng);
-        let verifying_key = signing_key.verifying_key();
-
-        // Extract private and public key bytes
-        let private_key_bytes = signing_key.to_bytes();
-        let public_key_bytes = verifying_key.to_bytes();
-
-        // Format private key in OpenSSH format
-        let private_key_b64 = general_purpose::STANDARD.encode(private_key_bytes);
-        let public_key_b64 = general_purpose::STANDARD.encode(public_key_bytes);
+        // Generate Ed25519 key pair using ssh-key library for proper format
+        let private_key = PrivateKey::random(&mut OsRng, ssh_key::Algorithm::Ed25519)
+            .map_err(|e| Error::Config(format!("Failed to generate SSH key: {}", e)))?;
+        
+        let public_key = private_key.public_key();
 
         // Create comment with expiration info
         let expires_at = if validity_hours > 0 {
@@ -104,17 +97,20 @@ impl SshKeyInstaller {
         };
 
         // Format public key in OpenSSH format
-        let public_key = format!("ssh-ed25519 {} {}", public_key_b64, comment_with_expiry);
+        let public_key_openssh = public_key
+            .to_openssh()
+            .map_err(|e| Error::Config(format!("Failed to format public key: {}", e)))?;
+        
+        let public_key_str = format!("{} {}", public_key_openssh.trim(), comment_with_expiry);
 
-        // Format private key in OpenSSH format (simplified)
-        let private_key = format!(
-            "-----BEGIN OPENSSH PRIVATE KEY-----\n{}\n-----END OPENSSH PRIVATE KEY-----",
-            private_key_b64
-        );
+        // Format private key in OpenSSH format
+        let private_key_openssh = private_key
+            .to_openssh(ssh_key::LineEnding::LF)
+            .map_err(|e| Error::Config(format!("Failed to format private key: {}", e)))?;
 
         Ok(SshKeyPair {
-            private_key,
-            public_key,
+            private_key: private_key_openssh.to_string(),
+            public_key: public_key_str,
             key_type: "ssh-ed25519".to_string(),
             comment: comment_with_expiry,
             expires_at,
@@ -521,13 +517,18 @@ impl SshKeyInstaller {
         );
 
         // For Ed25519 keys, we need to read the private key and derive the public key
-        let _private_key_content = fs::read_to_string(private_key_path).map_err(Error::Io)?;
+        let private_key_content = fs::read_to_string(private_key_path).map_err(Error::Io)?;
 
-        // This is a simplified approach - in a real implementation, you'd parse the OpenSSH private key format
-        // For now, we'll return an error suggesting the user provide the public key directly
-        Err(Error::Unsupported(
-            "Extracting public key from private key file is not yet supported. Please use --public-key-file instead.".to_string()
-        ))
+        // Parse the OpenSSH private key format using ssh-key library
+        let private_key = PrivateKey::from_openssh(&private_key_content)
+            .map_err(|e| Error::Config(format!("Failed to parse private key: {}", e)))?;
+        
+        let public_key = private_key.public_key();
+        let public_key_openssh = public_key
+            .to_openssh()
+            .map_err(|e| Error::Config(format!("Failed to format public key: {}", e)))?;
+
+        Ok(public_key_openssh.trim().to_string())
     }
     pub async fn install_ssh_key_workflow(
         &self,
