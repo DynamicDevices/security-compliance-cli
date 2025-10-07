@@ -13,6 +13,8 @@ pub enum HardwareSecurityTests {
     HardwareRootOfTrust,
     CryptoAcceleration,
     RandomNumberGenerator,
+    Pcf2131Rtc,
+    UsbSecurity,
 }
 
 #[async_trait]
@@ -26,6 +28,8 @@ impl SecurityTest for HardwareSecurityTests {
             Self::HardwareRootOfTrust => self.test_hardware_root_of_trust(target).await,
             Self::CryptoAcceleration => self.test_crypto_acceleration(target).await,
             Self::RandomNumberGenerator => self.test_random_number_generator(target).await,
+            Self::Pcf2131Rtc => self.test_pcf2131_rtc(target).await,
+            Self::UsbSecurity => self.test_usb_security(target).await,
         };
 
         let duration = start_time.elapsed();
@@ -59,6 +63,8 @@ impl SecurityTest for HardwareSecurityTests {
             Self::HardwareRootOfTrust => "hardware_003",
             Self::CryptoAcceleration => "hardware_004",
             Self::RandomNumberGenerator => "hardware_005",
+            Self::Pcf2131Rtc => "hardware_006",
+            Self::UsbSecurity => "hardware_007",
         }
     }
 
@@ -69,6 +75,8 @@ impl SecurityTest for HardwareSecurityTests {
             Self::HardwareRootOfTrust => "Hardware Root of Trust",
             Self::CryptoAcceleration => "Crypto Hardware Acceleration",
             Self::RandomNumberGenerator => "Hardware RNG",
+            Self::Pcf2131Rtc => "PCF2131 Real-Time Clock",
+            Self::UsbSecurity => "USB Security Configuration",
         }
     }
 
@@ -83,6 +91,8 @@ impl SecurityTest for HardwareSecurityTests {
             Self::HardwareRootOfTrust => "Confirms the hardware root of trust is established and functional. Checks for secure boot fuses, OTP (One-Time Programmable) memory, and AHAB (Advanced High Assurance Boot) indicators that form the foundation of system security.",
             Self::CryptoAcceleration => "Validates hardware cryptographic acceleration capabilities through CAAM (Cryptographic Acceleration and Assurance Module). Hardware crypto acceleration improves performance and security for encryption, decryption, and digital signature operations.",
             Self::RandomNumberGenerator => "Ensures the hardware random number generator (TRNG - True Random Number Generator) is functional and providing sufficient entropy. Critical for cryptographic key generation, secure communications, and preventing predictable security vulnerabilities.",
+            Self::Pcf2131Rtc => "Validates the PCF2131 Real-Time Clock functionality on i.MX93 E-Ink platforms. The RTC provides accurate timekeeping for security events, certificate validation, and time-based security policies. Critical for maintaining security audit trails and time-sensitive cryptographic operations.",
+            Self::UsbSecurity => "Evaluates USB security configuration including host/device mode validation, USB port restrictions, and device enumeration controls. Checks for proper USB security policies to prevent unauthorized device connections and data exfiltration. Essential for preventing BadUSB attacks and maintaining USB interface security.",
         }
     }
 }
@@ -374,6 +384,251 @@ impl HardwareSecurityTests {
                 TestStatus::Failed,
                 format!("Insufficient entropy ({})", entropy),
                 Some(details),
+            ))
+        }
+    }
+
+    async fn test_pcf2131_rtc(
+        &self,
+        target: &mut Target,
+    ) -> Result<(TestStatus, String, Option<String>)> {
+        let mut details = Vec::new();
+        let mut rtc_indicators = Vec::new();
+
+        // Check for PCF2131 in I2C devices
+        let i2c_detect = target
+            .execute_command("i2cdetect -y 0 2>/dev/null | grep -E '51|UU' || i2cdetect -y 1 2>/dev/null | grep -E '51|UU' || echo 'no_i2c'")
+            .await?;
+        if !i2c_detect.stdout.contains("no_i2c") && (i2c_detect.stdout.contains("51") || i2c_detect.stdout.contains("UU")) {
+            rtc_indicators.push("I2C device at address 0x51");
+            details.push(format!("I2C detection: {}", i2c_detect.stdout.trim()));
+        }
+
+        // Check for PCF2131 in device tree
+        let dt_rtc = target
+            .execute_command("find /proc/device-tree -name '*pcf2131*' -o -name '*rtc*' 2>/dev/null | grep -i pcf2131")
+            .await?;
+        if !dt_rtc.stdout.is_empty() {
+            rtc_indicators.push("PCF2131 device tree entry");
+            details.push(format!("Device tree: {}", dt_rtc.stdout.trim()));
+        }
+
+        // Check for RTC device nodes
+        let rtc_devices = target
+            .execute_command("ls -la /dev/rtc* 2>/dev/null || echo 'no_rtc_devices'")
+            .await?;
+        if !rtc_devices.stdout.contains("no_rtc_devices") {
+            rtc_indicators.push("RTC device nodes present");
+            details.push(format!("RTC devices: {}", rtc_devices.stdout.trim()));
+        }
+
+        // Check kernel messages for PCF2131
+        let dmesg_pcf = target
+            .execute_command("dmesg | grep -i 'pcf2131\\|rtc.*pcf' || echo 'no_pcf_messages'")
+            .await?;
+        if !dmesg_pcf.stdout.contains("no_pcf_messages") {
+            rtc_indicators.push("PCF2131 kernel messages");
+            details.push(format!("Kernel messages: {}", dmesg_pcf.stdout.trim()));
+        }
+
+        // Test RTC functionality if available
+        let rtc_test = target
+            .execute_command("hwclock --show 2>/dev/null || echo 'hwclock_failed'")
+            .await?;
+        if !rtc_test.stdout.contains("hwclock_failed") && !rtc_test.stdout.trim().is_empty() {
+            rtc_indicators.push("RTC hardware clock functional");
+            details.push(format!("Hardware clock: {}", rtc_test.stdout.trim()));
+        }
+
+        // Check RTC driver binding
+        let rtc_driver = target
+            .execute_command("cat /sys/class/rtc/rtc*/name 2>/dev/null | grep -i pcf2131 || echo 'no_pcf_driver'")
+            .await?;
+        if !rtc_driver.stdout.contains("no_pcf_driver") {
+            rtc_indicators.push("PCF2131 driver bound");
+            details.push(format!("RTC driver: {}", rtc_driver.stdout.trim()));
+        }
+
+        // Check system time synchronization
+        let time_sync = target
+            .execute_command("timedatectl status 2>/dev/null | grep -E 'RTC time|synchronized' || echo 'no_timedatectl'")
+            .await?;
+        if !time_sync.stdout.contains("no_timedatectl") {
+            rtc_indicators.push("System time synchronization");
+            details.push(format!("Time sync: {}", time_sync.stdout.trim()));
+        }
+
+        let details_str = if details.is_empty() {
+            None
+        } else {
+            Some(details.join("\n"))
+        };
+
+        // Determine status based on RTC indicators
+        match rtc_indicators.len() {
+            4.. => Ok((
+                TestStatus::Passed,
+                format!("PCF2131 RTC fully functional: {}", rtc_indicators.join(", ")),
+                details_str,
+            )),
+            2..=3 => Ok((
+                TestStatus::Passed,
+                format!("PCF2131 RTC detected: {}", rtc_indicators.join(", ")),
+                details_str,
+            )),
+            1 => Ok((
+                TestStatus::Warning,
+                format!("Partial PCF2131 RTC detection: {}", rtc_indicators.join(", ")),
+                details_str,
+            )),
+            _ => Ok((
+                TestStatus::Failed,
+                "PCF2131 RTC not detected".to_string(),
+                details_str,
+            )),
+        }
+    }
+
+    async fn test_usb_security(
+        &self,
+        target: &mut Target,
+    ) -> Result<(TestStatus, String, Option<String>)> {
+        let mut details = Vec::new();
+        let mut security_features = Vec::new();
+        let mut security_issues = Vec::new();
+
+        // Check USB controllers and devices
+        let usb_controllers = target
+            .execute_command("lsusb -t 2>/dev/null || echo 'lsusb_not_available'")
+            .await?;
+        
+        let usb_devices = target
+            .execute_command("lsusb 2>/dev/null | wc -l")
+            .await?;
+        
+        let device_count: usize = usb_devices.stdout.trim().parse().unwrap_or(0);
+        details.push(format!("USB devices detected: {}", device_count));
+        
+        if !usb_controllers.stdout.contains("lsusb_not_available") {
+            security_features.push("USB enumeration working");
+            details.push(format!("USB topology: {}", usb_controllers.stdout.lines().take(3).collect::<Vec<_>>().join("; ")));
+        }
+
+        // Check for USB security modules/drivers
+        let usb_security_modules = target
+            .execute_command("lsmod | grep -E 'usbguard|usb.*security|usb.*auth' || echo 'no_usb_security_modules'")
+            .await?;
+        
+        if !usb_security_modules.stdout.contains("no_usb_security_modules") {
+            security_features.push("USB security modules loaded");
+            details.push(format!("USB security modules: {}", usb_security_modules.stdout.trim()));
+        }
+
+        // Check USB configuration and permissions
+        let usb_permissions = target
+            .execute_command("ls -la /dev/bus/usb/*/* 2>/dev/null | head -5 || echo 'no_usb_devices'")
+            .await?;
+        
+        if !usb_permissions.stdout.contains("no_usb_devices") {
+            // Check if USB devices have restrictive permissions
+            if usb_permissions.stdout.contains("crw-rw----") {
+                security_features.push("Restrictive USB device permissions");
+            } else if usb_permissions.stdout.contains("crw-rw-rw-") {
+                security_issues.push("USB devices have world-writable permissions");
+            }
+            details.push(format!("USB device permissions: {}", usb_permissions.stdout.lines().take(2).collect::<Vec<_>>().join("; ")));
+        }
+
+        // Check for USB host/device mode configuration
+        let usb_mode_check = target
+            .execute_command("find /sys/class/udc -name '*' 2>/dev/null | head -3")
+            .await?;
+        
+        if !usb_mode_check.stdout.is_empty() {
+            security_features.push("USB device mode capability");
+            details.push(format!("USB device controllers: {}", usb_mode_check.stdout.lines().count()));
+        }
+
+        // Check for USB OTG configuration
+        let usb_otg = target
+            .execute_command("dmesg | grep -i 'otg\\|usb.*host.*device' | head -2 || echo 'no_otg_messages'")
+            .await?;
+        
+        if !usb_otg.stdout.contains("no_otg_messages") {
+            security_features.push("USB OTG configuration detected");
+            details.push(format!("USB OTG: {}", usb_otg.stdout.lines().take(1).collect::<Vec<_>>().join("")));
+        }
+
+        // Check for USB storage restrictions
+        let usb_storage_policy = target
+            .execute_command("cat /proc/sys/kernel/modules_disabled 2>/dev/null || echo '0'")
+            .await?;
+        
+        let modules_disabled: u32 = usb_storage_policy.stdout.trim().parse().unwrap_or(0);
+        if modules_disabled == 1 {
+            security_features.push("Kernel module loading disabled (USB storage protection)");
+        }
+        details.push(format!("Module loading disabled: {}", modules_disabled == 1));
+
+        // Check for USB mass storage devices
+        let usb_storage = target
+            .execute_command("lsusb | grep -i 'mass storage\\|storage' | wc -l")
+            .await?;
+        
+        let storage_devices: usize = usb_storage.stdout.trim().parse().unwrap_or(0);
+        if storage_devices > 0 {
+            security_issues.push("USB storage devices detected (potential data exfiltration risk)");
+        }
+        details.push(format!("USB storage devices: {}", storage_devices));
+
+        // Check for USB HID devices (potential BadUSB risk)
+        let usb_hid = target
+            .execute_command("lsusb | grep -i 'keyboard\\|mouse\\|hid' | wc -l")
+            .await?;
+        
+        let hid_devices: usize = usb_hid.stdout.trim().parse().unwrap_or(0);
+        if hid_devices > 2 {
+            security_issues.push("Multiple USB HID devices detected (review for unauthorized devices)");
+        }
+        details.push(format!("USB HID devices: {}", hid_devices));
+
+        // Check USB autosuspend settings
+        let usb_autosuspend = target
+            .execute_command("find /sys/bus/usb/devices -name 'autosuspend' -exec cat {} \\; 2>/dev/null | head -3")
+            .await?;
+        
+        if !usb_autosuspend.stdout.is_empty() {
+            security_features.push("USB power management configured");
+            details.push("USB autosuspend: configured".to_string());
+        }
+
+        let details_str = if details.is_empty() {
+            None
+        } else {
+            Some(details.join("\n"))
+        };
+
+        // Determine overall security status
+        let feature_count = security_features.len();
+        let issue_count = security_issues.len();
+
+        if issue_count > 2 || (issue_count > 0 && feature_count < 2) {
+            Ok((
+                TestStatus::Failed,
+                format!("USB security issues detected: {}", security_issues.join(", ")),
+                details_str,
+            ))
+        } else if issue_count > 0 || feature_count < 3 {
+            Ok((
+                TestStatus::Warning,
+                format!("USB security needs attention: {} features, {} issues", feature_count, issue_count),
+                details_str,
+            ))
+        } else {
+            Ok((
+                TestStatus::Passed,
+                format!("USB security configuration good: {}", security_features.join(", ")),
+                details_str,
             ))
         }
     }

@@ -16,6 +16,7 @@ pub enum RuntimeSecurityTests {
     ServiceHardening,
     KernelProtections,
     ReadOnlyFilesystem,
+    FoundriesLmpSecurity,
 }
 
 #[async_trait]
@@ -32,6 +33,7 @@ impl SecurityTest for RuntimeSecurityTests {
             Self::ServiceHardening => self.test_service_hardening(target).await,
             Self::KernelProtections => self.test_kernel_protections(target).await,
             Self::ReadOnlyFilesystem => self.test_readonly_filesystem(target).await,
+            Self::FoundriesLmpSecurity => self.test_foundries_lmp_security(target).await,
         };
 
         let duration = start_time.elapsed();
@@ -68,6 +70,7 @@ impl SecurityTest for RuntimeSecurityTests {
             Self::ServiceHardening => "runtime_006",
             Self::KernelProtections => "runtime_007",
             Self::ReadOnlyFilesystem => "runtime_008",
+            Self::FoundriesLmpSecurity => "runtime_009",
         }
     }
 
@@ -81,6 +84,7 @@ impl SecurityTest for RuntimeSecurityTests {
             Self::ServiceHardening => "Service Hardening",
             Self::KernelProtections => "Kernel Security Protections",
             Self::ReadOnlyFilesystem => "Read-Only Filesystem Protection",
+            Self::FoundriesLmpSecurity => "Foundries.io LMP Security Features",
         }
     }
 
@@ -98,6 +102,7 @@ impl SecurityTest for RuntimeSecurityTests {
             Self::ServiceHardening => "Assesses system service security hardening including service isolation, capability restrictions, and secure service configurations. Verifies services run with minimal privileges and proper security boundaries. Important for reducing attack surface and containing potential compromises.",
             Self::KernelProtections => "Validates kernel-level security features including ASLR (Address Space Layout Randomization), stack protection, and other exploit mitigation techniques. These protections make it significantly harder for attackers to exploit memory corruption vulnerabilities and achieve code execution.",
             Self::ReadOnlyFilesystem => "Validates that critical system directories are mounted read-only to prevent unauthorized modifications and enhance system integrity. Checks Foundries.io LMP read-only root filesystem configuration with proper writable areas for logs, data, and temporary files. Essential for preventing persistent attacks and maintaining system consistency.",
+            Self::FoundriesLmpSecurity => "Comprehensive evaluation of Foundries.io Linux Micro Platform (LMP) specific security features including OSTree immutable filesystem, aktualizr-lite OTA updates, Docker security, and platform-specific hardening. Validates that LMP security architecture is properly configured for embedded IoT deployment security.",
         }
     }
 }
@@ -1202,6 +1207,165 @@ impl RuntimeSecurityTests {
                     "Insufficient read-only protection ({} protected, {} issues)",
                     readonly_count, issue_count
                 ),
+                details_str,
+            ))
+        }
+    }
+
+    async fn test_foundries_lmp_security(
+        &self,
+        target: &mut Target,
+    ) -> Result<(TestStatus, String, Option<String>)> {
+        let mut details = Vec::new();
+        let mut lmp_features = Vec::new();
+        let mut security_issues = Vec::new();
+
+        // Check if this is a Foundries.io LMP system
+        let lmp_check = target
+            .execute_command("cat /etc/os-release | grep -i 'linux.*micro.*platform\\|foundries'")
+            .await?;
+        
+        if lmp_check.stdout.is_empty() {
+            return Ok((
+                TestStatus::Skipped,
+                "Not a Foundries.io LMP system".to_string(),
+                None,
+            ));
+        }
+
+        lmp_features.push("Foundries.io LMP detected");
+        details.push(format!("LMP OS Release: {}", lmp_check.stdout.trim()));
+
+        // Check OSTree status (immutable filesystem)
+        let ostree_status = target
+            .execute_command("ostree admin status 2>/dev/null || echo 'ostree_not_available'")
+            .await?;
+        
+        if !ostree_status.stdout.contains("ostree_not_available") {
+            lmp_features.push("OSTree immutable filesystem");
+            details.push(format!("OSTree status: {}", ostree_status.stdout.lines().take(2).collect::<Vec<_>>().join("; ")));
+        } else {
+            security_issues.push("OSTree not detected (LMP should use immutable filesystem)");
+        }
+
+        // Check aktualizr-lite OTA service
+        let ota_service = target
+            .execute_command("systemctl is-active aktualizr-lite 2>/dev/null || echo 'not_active'")
+            .await?;
+        
+        if ota_service.stdout.trim() == "active" {
+            lmp_features.push("OTA updates service active");
+            details.push("aktualizr-lite: active".to_string());
+        } else {
+            security_issues.push("OTA update service not active");
+        }
+
+        // Check Docker/container security configuration
+        let docker_info = target
+            .execute_command("docker info 2>/dev/null | grep -E 'Security Options|User Namespaces' || echo 'docker_not_available'")
+            .await?;
+        
+        if !docker_info.stdout.contains("docker_not_available") {
+            if docker_info.stdout.contains("seccomp") {
+                lmp_features.push("Docker seccomp security");
+            }
+            details.push(format!("Docker security: {}", docker_info.stdout.trim()));
+        }
+
+        // Check for LMP-specific hardening
+        let lmp_hardening = target
+            .execute_command("systemctl list-units --type=service | grep -E 'fioconfig|lmp-' | wc -l")
+            .await?;
+        
+        let lmp_services: usize = lmp_hardening.stdout.trim().parse().unwrap_or(0);
+        if lmp_services > 0 {
+            lmp_features.push("LMP-specific services");
+            details.push(format!("LMP services: {}", lmp_services));
+        }
+
+        // Check kernel security features for LMP
+        let kernel_security = target
+            .execute_command("cat /proc/sys/kernel/randomize_va_space 2>/dev/null")
+            .await?;
+        
+        if kernel_security.stdout.trim() == "2" {
+            lmp_features.push("ASLR enabled");
+        }
+
+        // Check for secure boot indicators
+        let secure_boot = target
+            .execute_command("dmesg | grep -i 'secure.*boot\\|ahab\\|hab' | wc -l")
+            .await?;
+        
+        let secure_boot_msgs: usize = secure_boot.stdout.trim().parse().unwrap_or(0);
+        if secure_boot_msgs > 0 {
+            lmp_features.push("Secure boot indicators");
+            details.push(format!("Secure boot messages: {}", secure_boot_msgs));
+        }
+
+        // Check factory configuration
+        let factory_config = target
+            .execute_command("ls -la /var/sota/sql.db /var/lib/aktualizr-lite/ 2>/dev/null | wc -l")
+            .await?;
+        
+        let config_files: usize = factory_config.stdout.trim().parse().unwrap_or(0);
+        if config_files > 0 {
+            lmp_features.push("Factory configuration present");
+            details.push("Factory config: configured".to_string());
+        }
+
+        // Check for proper user configuration (fio user management)
+        let user_config = target
+            .execute_command("id fio 2>/dev/null && echo 'fio_user_exists' || echo 'no_fio_user'")
+            .await?;
+        
+        if user_config.stdout.contains("fio_user_exists") {
+            lmp_features.push("LMP user configuration");
+        }
+
+        // Check filesystem mount security
+        let mount_security = target
+            .execute_command("mount | grep -E 'ro,|nodev,|nosuid,' | wc -l")
+            .await?;
+        
+        let secure_mounts: usize = mount_security.stdout.trim().parse().unwrap_or(0);
+        if secure_mounts >= 3 {
+            lmp_features.push("Secure filesystem mounts");
+            details.push(format!("Secure mounts: {}", secure_mounts));
+        }
+
+        let details_str = if details.is_empty() {
+            None
+        } else {
+            Some(details.join("\n"))
+        };
+
+        // Determine overall LMP security status
+        let feature_count = lmp_features.len();
+        let issue_count = security_issues.len();
+
+        if feature_count >= 6 && issue_count == 0 {
+            Ok((
+                TestStatus::Passed,
+                format!("Foundries.io LMP security excellent: {}", lmp_features.join(", ")),
+                details_str,
+            ))
+        } else if feature_count >= 4 && issue_count <= 1 {
+            Ok((
+                TestStatus::Passed,
+                format!("Foundries.io LMP security good: {} features, {} issues", feature_count, issue_count),
+                details_str,
+            ))
+        } else if feature_count >= 3 {
+            Ok((
+                TestStatus::Warning,
+                format!("Foundries.io LMP security needs attention: {} features, {} issues", feature_count, issue_count),
+                details_str,
+            ))
+        } else {
+            Ok((
+                TestStatus::Failed,
+                format!("Foundries.io LMP security insufficient: {} features, {} issues", feature_count, issue_count),
                 details_str,
             ))
         }
