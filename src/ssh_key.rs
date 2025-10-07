@@ -175,7 +175,10 @@ impl SshKeyInstaller {
             match channel.execute_command("whoami").await {
                 Ok(result) if result.exit_code == 0 => {
                     let detected_user = result.stdout.trim().lines().last().unwrap_or("").trim();
-                    if !detected_user.is_empty() && detected_user != "root" && !detected_user.contains('@') {
+                    if !detected_user.is_empty()
+                        && detected_user != "root"
+                        && !detected_user.contains('@')
+                    {
                         info!("Detected current user: {}, installing key for this user instead of root", detected_user);
                         detected_user.to_string()
                     } else {
@@ -184,7 +187,10 @@ impl SshKeyInstaller {
                     }
                 }
                 _ => {
-                    info!("Could not detect current user, using configured target: {}", self.target_user);
+                    info!(
+                        "Could not detect current user, using configured target: {}",
+                        self.target_user
+                    );
                     self.target_user.clone()
                 }
             }
@@ -199,7 +205,10 @@ impl SshKeyInstaller {
             format!("/home/{}", actual_user)
         };
 
-        info!("Installing SSH key for user: {} (home: {})", actual_user, home_dir);
+        info!(
+            "Installing SSH key for user: {} (home: {})",
+            actual_user, home_dir
+        );
 
         // Ensure the .ssh directory exists
         let create_ssh_dir = format!("mkdir -p {}/.ssh", home_dir);
@@ -251,10 +260,7 @@ impl SshKeyInstaller {
         }
 
         // Set ownership of the .ssh directory and files
-        let chown_command = format!(
-            "chown -R {}:{} {}/.ssh",
-            actual_user, actual_user, home_dir
-        );
+        let chown_command = format!("chown -R {}:{} {}/.ssh", actual_user, actual_user, home_dir);
         debug!("Setting ownership: {}", chown_command);
 
         let result = channel.execute_command(&chown_command).await?;
@@ -262,7 +268,10 @@ impl SshKeyInstaller {
             warn!("Failed to set ownership: {}", result.stderr);
         }
 
-        info!("SSH public key installed successfully for user: {}", actual_user);
+        info!(
+            "SSH public key installed successfully for user: {}",
+            actual_user
+        );
         Ok(())
     }
 
@@ -593,7 +602,10 @@ impl SshKeyInstaller {
             match channel.execute_command("whoami").await {
                 Ok(result) if result.exit_code == 0 => {
                     let detected_user = result.stdout.trim().lines().last().unwrap_or("").trim();
-                    if !detected_user.is_empty() && !detected_user.contains('@') && detected_user != "root" {
+                    if !detected_user.is_empty()
+                        && !detected_user.contains('@')
+                        && detected_user != "root"
+                    {
                         users.push(detected_user.to_string());
                     }
                 }
@@ -612,18 +624,29 @@ impl SshKeyInstaller {
             };
 
             let authorized_keys_path = format!("{}/.ssh/authorized_keys", home_dir);
-            
-            debug!("Checking authorized_keys for user {}: {}", user, authorized_keys_path);
+
+            debug!(
+                "Checking authorized_keys for user {}: {}",
+                user, authorized_keys_path
+            );
 
             // Check if authorized_keys file exists
-            let check_command = format!("test -f {} && echo 'exists' || echo 'not_found'", authorized_keys_path);
+            let check_command = format!(
+                "test -f {} && echo 'exists' || echo 'not_found'",
+                authorized_keys_path
+            );
             match channel.execute_command(&check_command).await {
-                Ok(result) if result.exit_code == 0 && result.stdout.trim() == "exists" => {
+                Ok(result) if result.exit_code == 0 && result.stdout.contains("exists") => {
                     // Read the authorized_keys file
                     let cat_command = format!("cat {}", authorized_keys_path);
                     match channel.execute_command(&cat_command).await {
                         Ok(result) if result.exit_code == 0 => {
-                            let keys = Self::parse_authorized_keys(&result.stdout, &user, temp_keys_only, expired_only);
+                            let keys = Self::parse_authorized_keys(
+                                &result.stdout,
+                                &user,
+                                temp_keys_only,
+                                expired_only,
+                            );
                             all_keys.extend(keys);
                         }
                         Ok(result) => {
@@ -681,7 +704,7 @@ impl SshKeyInstaller {
 
                 // Parse expiration from comment if present
                 let expiration = Self::parse_expiration_from_comment(&comment);
-                let is_expired = expiration.map_or(false, |exp| now > exp);
+                let is_expired = expiration.is_some_and(|exp| now > exp);
 
                 // Filter for expired keys if requested
                 if expired_only && !is_expired {
@@ -711,8 +734,14 @@ impl SshKeyInstaller {
         if comment.contains("expires:") {
             // Look for pattern like "expires:2025-10-07 15:33:25 UTC"
             if let Some(expires_part) = comment.split("expires:").nth(1) {
-                let timestamp_str = expires_part.trim().split_whitespace().take(3).collect::<Vec<_>>().join(" ");
-                if let Ok(dt) = chrono::DateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S UTC") {
+                let timestamp_str = expires_part
+                    .split_whitespace()
+                    .take(3)
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if let Ok(dt) =
+                    chrono::DateTime::parse_from_str(&timestamp_str, "%Y-%m-%d %H:%M:%S UTC")
+                {
                     return Some(dt.with_timezone(&chrono::Utc));
                 }
             }
@@ -747,7 +776,8 @@ impl SshKeyInstaller {
 
         if detailed {
             info!("   Comment: {}", key.comment);
-            info!("   Key: {}...{}", 
+            info!(
+                "   Key: {}...{}",
                 &key.key_data[..key.key_data.len().min(20)],
                 &key.key_data[key.key_data.len().saturating_sub(20)..]
             );

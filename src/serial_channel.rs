@@ -19,14 +19,14 @@ fn strip_ansi_codes(text: &str) -> String {
     // Simple regex-like approach to remove ANSI escape sequences
     let mut result = String::new();
     let mut chars = text.chars().peekable();
-    
+
     while let Some(ch) = chars.next() {
         if ch == '\x1b' {
             // Found escape sequence, skip until we find the end
             if chars.peek() == Some(&'[') {
                 chars.next(); // consume '['
-                // Skip until we find a letter (end of ANSI sequence)
-                while let Some(next_ch) = chars.next() {
+                              // Skip until we find a letter (end of ANSI sequence)
+                for next_ch in chars.by_ref() {
                     if next_ch.is_ascii_alphabetic() {
                         break;
                     }
@@ -36,7 +36,7 @@ fn strip_ansi_codes(text: &str) -> String {
             result.push(ch);
         }
     }
-    
+
     result
 }
 
@@ -119,7 +119,12 @@ impl SerialChannel {
                         let clean_text = strip_ansi_codes(&raw_text);
                         response = clean_text.clone();
 
-                        debug!("Serial RX: {:?} -> {:?} (looking for: {:?})", raw_text.trim(), clean_text.trim(), expected_prompt);
+                        debug!(
+                            "Serial RX: {:?} -> {:?} (looking for: {:?})",
+                            raw_text.trim(),
+                            clean_text.trim(),
+                            expected_prompt
+                        );
 
                         if clean_text.contains(expected_prompt) {
                             return Ok(response.clone());
@@ -179,29 +184,37 @@ impl SerialChannel {
             port.write_all(&[3]) // Ctrl-C
                 .await
                 .map_err(|e| Error::SerialConnection(format!("Failed to send Ctrl-C: {}", e)))?;
-            
+
             sleep(Duration::from_millis(100)).await;
             // Try different line endings to wake up the device
-            for (i, line_ending) in [b"\r\n".as_slice(), b"\n".as_slice(), b"\r".as_slice()].iter().enumerate() {
+            for (i, line_ending) in [b"\r\n".as_slice(), b"\n".as_slice(), b"\r".as_slice()]
+                .iter()
+                .enumerate()
+            {
                 debug!("Sending line ending attempt {}: {:?}", i + 1, line_ending);
-                port.write_all(line_ending)
-                    .await
-                    .map_err(|e| Error::SerialConnection(format!("Failed to send newline: {}", e)))?;
+                port.write_all(line_ending).await.map_err(|e| {
+                    Error::SerialConnection(format!("Failed to send newline: {}", e))
+                })?;
                 port.flush()
                     .await
                     .map_err(|e| Error::SerialConnection(format!("Failed to flush: {}", e)))?;
-                
+
                 // Wait a bit and try to read any response
                 sleep(Duration::from_millis(500)).await;
-                
+
                 // Try to read any immediate response
                 let mut temp_buf = [0u8; 1024];
                 match port.try_read(&mut temp_buf) {
                     Ok(n) if n > 0 => {
                         let raw_response = String::from_utf8_lossy(&temp_buf[..n]);
                         let clean_response = strip_ansi_codes(&raw_response);
-                        info!("Received after line ending {}: {:?} -> {:?}", i + 1, raw_response.trim(), clean_response.trim());
-                        
+                        info!(
+                            "Received after line ending {}: {:?} -> {:?}",
+                            i + 1,
+                            raw_response.trim(),
+                            clean_response.trim()
+                        );
+
                         // Check if we can see any shell-like prompt ($ or #) - be flexible
                         if clean_response.contains('$') || clean_response.contains('#') {
                             info!("Shell prompt detected in response, assuming ready");
@@ -309,7 +322,7 @@ impl CommunicationChannel for SerialChannel {
             .data_bits(tokio_serial::DataBits::Eight)
             .parity(tokio_serial::Parity::None)
             .stop_bits(tokio_serial::StopBits::One)
-            .flow_control(tokio_serial::FlowControl::None)  // Disable hardware handshaking
+            .flow_control(tokio_serial::FlowControl::None) // Disable hardware handshaking
             .open_native_async()
             .map_err(|e| Error::SerialConnection(format!("Failed to open serial port: {}", e)))?;
 
@@ -352,7 +365,11 @@ impl CommunicationChannel for SerialChannel {
         // Ensure we're logged in
         self.login_if_needed().await?;
 
-        debug!("Executing serial command with timeout: {} (timeout: {}s)", command, timeout_duration.as_secs());
+        debug!(
+            "Executing serial command with timeout: {} (timeout: {}s)",
+            command,
+            timeout_duration.as_secs()
+        );
 
         // Send the command
         self.send_command(command).await?;
@@ -384,7 +401,11 @@ impl CommunicationChannel for SerialChannel {
                         let raw_text = String::from_utf8_lossy(&buffer);
                         let clean_text = strip_ansi_codes(&raw_text);
 
-                        debug!("Serial RX (command output): {:?} -> {:?}", raw_text.trim(), clean_text.trim());
+                        debug!(
+                            "Serial RX (command output): {:?} -> {:?}",
+                            raw_text.trim(),
+                            clean_text.trim()
+                        );
 
                         // Skip the command echo (first line)
                         if !command_echo_seen {
@@ -393,12 +414,14 @@ impl CommunicationChannel for SerialChannel {
                                 // Find the line that contains our command (echo)
                                 let mut start_index = 0;
                                 for (i, line) in lines.iter().enumerate() {
-                                    if line.trim().contains(command.trim()) || line.trim().ends_with(command.trim()) {
+                                    if line.trim().contains(command.trim())
+                                        || line.trim().ends_with(command.trim())
+                                    {
                                         start_index = i + 1; // Start after the echo line
                                         break;
                                     }
                                 }
-                                
+
                                 if start_index < lines.len() {
                                     stdout = lines[start_index..].join("\n");
                                     command_echo_seen = true;
@@ -413,7 +436,10 @@ impl CommunicationChannel for SerialChannel {
                             let lines: Vec<&str> = clean_text.lines().collect();
                             // Find where our previous output ended and continue from there
                             if let Some(last_stdout_line) = stdout.lines().last() {
-                                if let Some(pos) = lines.iter().position(|&line| line.trim() == last_stdout_line.trim()) {
+                                if let Some(pos) = lines
+                                    .iter()
+                                    .position(|&line| line.trim() == last_stdout_line.trim())
+                                {
                                     if pos + 1 < lines.len() {
                                         let new_lines = &lines[pos + 1..];
                                         stdout.push('\n');
@@ -430,13 +456,13 @@ impl CommunicationChannel for SerialChannel {
 
                         // Check if we've reached the shell prompt (command completed)
                         // Be more flexible with prompt detection
-                        let has_prompt = clean_text.ends_with(&shell_prompt) 
+                        let has_prompt = clean_text.ends_with(&shell_prompt)
                             || clean_text.contains(&shell_prompt)
                             || clean_text.ends_with("$ ")
                             || clean_text.ends_with("# ")
                             || clean_text.contains("$ ")
                             || clean_text.contains("# ");
-                            
+
                         if has_prompt {
                             debug!("Shell prompt detected, command completed");
                             // Remove any prompt from the output
