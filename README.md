@@ -14,6 +14,12 @@ A comprehensive security compliance testing tool for Dynamic Devices embedded sy
 - Certificate management (PKI, X.509, TLS validation)
 - Production hardening (debug disabled, monitoring, backups)
 
+🎓 **Educational Verbose Mode**
+- Detailed test descriptions explaining security concepts
+- Two verbosity levels: `-v` for test purposes, `-vv` for categories
+- Helps users understand why each test is important
+- Educational output for security learning
+
 🎯 **Automated Compliance Checking**
 - EU Cyber Resilience Act (CRA) Article 11 data protection
 - UK CE Radio Equipment Directive (RED) Essential Requirements 3.3
@@ -78,6 +84,12 @@ The install script will:
 # Run all security compliance tests using SSH key authentication (recommended)
 security-compliance-cli --host 192.168.0.36 --user fio test --mode pre-production
 
+# Run tests with verbose output to understand what each test does
+security-compliance-cli --host 192.168.0.36 --user fio test --verbose
+
+# Run tests with maximum verbosity (includes test categories)
+security-compliance-cli --host 192.168.0.36 --user fio test -vv
+
 # Run tests with explicit SSH key path
 security-compliance-cli --host 192.168.0.36 --user fio --identity-file ~/.ssh/test_ed25519 test
 
@@ -119,6 +131,7 @@ security-compliance-cli list
 - **runtime_005**: User Permission Security
 - **runtime_006**: Service Hardening
 - **runtime_007**: Kernel Security Protections
+- **runtime_008**: Read-Only Filesystem Protection
 
 ### 🔧 Hardware Security Tests
 - **hardware_001**: EdgeLock Enclave (ELE)
@@ -275,11 +288,30 @@ Success Rate: 89.1%
   • compliance_001 - CRA Data Protection (Article 11): CRA non-compliant (1/4 items)
 ```
 
+### Verbose Mode Output
+
+```
+🔒 Security Compliance Testing
+================================
+Suite: All
+Tests: 64
+Mode: Pre-Production
+
+✅ boot_001 - Secure Boot Enabled
+   Purpose: Verifies that the hardware secure boot chain is properly enabled and functioning, ensuring only trusted firmware can execute during system startup
+   Result: AHAB secure boot detected
+
+✅ runtime_008 - Read-Only Filesystem Protection  
+   Purpose: Ensures critical system directories are mounted read-only to prevent unauthorized modifications and enhance system integrity
+   Result: Read-only filesystem properly configured (5 protected areas)
+```
+
 ### JSON Format
 
 ```json
 {
   "suite_name": "All",
+  "test_mode": "PreProduction",
   "total_tests": 64,
   "passed": 57,
   "failed": 3,
@@ -287,16 +319,18 @@ Success Rate: 89.1%
   "skipped": 0,
   "errors": 0,
   "duration": {
-    "secs": 45,
-    "nanos": 200000000
+    "secs": 78,
+    "nanos": 500000000
   },
   "timestamp": "2025-10-07T10:30:00Z",
   "system_info": {
     "kernel_version": "6.1.70-lmp-standard",
     "uname": "Linux imx93-jaguar-eink 6.1.70-lmp-standard #1 SMP PREEMPT",
     "uptime": "up 2 days, 14:32",
-    "memory_info": "MemTotal: 2097152 kB",
-    "os_release": "VERSION_ID=\"4.0.20\""
+    "memory_info": "total 1931 used 126 free 1447",
+    "os_release": "ID=lmp-dynamicdevices-headless VERSION_ID=4.0.20-2156-94",
+    "foundries_registration": "Not Registered",
+    "wireguard_status": "Not Available"
   },
   "results": [
     {
@@ -367,6 +401,12 @@ cargo test
 
 # Run with logging
 RUST_LOG=debug cargo run -- test --host 192.168.0.36
+
+# Run with verbose output for educational purposes
+cargo run -- test --host 192.168.0.36 --verbose
+
+# Cross-compile for ARM64 target
+./build-aarch64.sh
 ```
 
 ### Adding New Tests

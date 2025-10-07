@@ -5,6 +5,50 @@ All notable changes to the Security Compliance CLI project will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2025-10-07
+
+### 🎉 Latest Improvements
+
+#### Enhanced Documentation
+- **Updated README.md** with latest features including verbose mode examples
+- **Enhanced CONTEXT.md** with recent improvements and current implementation status
+- **Comprehensive project documentation** reflecting all 65 tests and educational features
+- **Updated examples** showing verbose output and educational capabilities
+
+#### Educational Features Expansion
+- **Verbose mode examples** in documentation showing educational output
+- **Enhanced test descriptions** in README with all current test categories
+- **Better user guidance** for understanding security testing concepts
+- **Improved onboarding** with clearer setup instructions
+
+#### System Information Enhancements
+- **Updated JSON output examples** with current system information format
+- **Enhanced system info display** showing Foundries.io LMP details
+- **Better target platform identification** in documentation
+- **Current runtime results** reflecting real system testing
+
+### 📚 Documentation Updates
+
+#### README.md Improvements
+- **Added verbose mode usage examples** (-v and -vv flags)
+- **Updated test suite listings** with runtime_008 and latest tests
+- **Enhanced JSON output examples** with current system information
+- **Better educational guidance** for security testing
+
+#### CONTEXT.md Enhancements
+- **Added recent major improvements section** detailing v0.3.0 features
+- **Updated test count** from 64 to 65 tests
+- **Enhanced implementation status** with educational features
+- **Better version tracking** and feature documentation
+
+#### Project Structure
+- **Improved documentation organization** with docs/ folder
+- **Enhanced script organization** with scripts/ folder
+- **Better separation of concerns** in documentation structure
+- **Clearer project navigation** and file organization
+
+---
+
 ## [0.3.0] - 2025-10-07
 
 ### 🎉 Major Features Added

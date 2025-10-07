@@ -1,4 +1,8 @@
-# Test Data Setup
+# SSH Setup for Security Compliance Testing
+
+## Overview
+
+This guide explains how to set up SSH access to your target board for security compliance testing. The security compliance CLI uses SSH to remotely execute tests on your embedded Linux device.
 
 ## SSH Key Setup for Board Access
 
@@ -22,6 +26,20 @@ ls -la ~/.ssh/
 echo "SSH key setup complete"
 ```
 
+## Automated Setup Script
+
+For convenience, you can use the automated installation script:
+
+```bash
+# Install test SSH key to local system (~/.ssh/)
+./scripts/install-test-key.sh
+```
+
+The install script will:
+- Copy test keys to your local `~/.ssh/` directory
+- Add SSH config entries for easy board access
+- Set proper file permissions automatically
+
 ## Test SSH Connection
 
 After running the above commands on the board, test the connection from your host machine:
@@ -43,16 +61,22 @@ Once SSH key authentication is working, you can run the security compliance CLI 
 
 ```bash
 # Run tests using automatic SSH key detection (recommended)
-cargo run -- --host <BOARD_IP_ADDRESS> --user fio test
+security-compliance-cli --host <BOARD_IP_ADDRESS> --user fio test
+
+# Run tests with verbose output to understand what each test does
+security-compliance-cli --host <BOARD_IP_ADDRESS> --user fio test --verbose
+
+# Run tests with maximum verbosity (includes test categories)
+security-compliance-cli --host <BOARD_IP_ADDRESS> --user fio test -vv
 
 # Run tests with explicit SSH key path
-cargo run -- --host <BOARD_IP_ADDRESS> --user fio --identity-file ~/.ssh/test_ed25519 test
+security-compliance-cli --host <BOARD_IP_ADDRESS> --user fio --identity-file ~/.ssh/test_ed25519 test
 
 # Run specific test suite
-cargo run -- --host <BOARD_IP_ADDRESS> --user fio test --test-suite boot
+security-compliance-cli --host <BOARD_IP_ADDRESS> --user fio test --test-suite boot
 
 # With the pre-configured host alias (if board IP is 192.168.0.36)
-cargo run -- --host 192.168.0.36 --user fio test
+security-compliance-cli --host 192.168.0.36 --user fio test
 ```
 
 **Note**: The CLI automatically tries SSH key authentication first using these locations in order:
@@ -63,6 +87,20 @@ cargo run -- --host 192.168.0.36 --user fio test
 5. `~/.ssh/id_ecdsa`
 
 If SSH key authentication fails, it falls back to password authentication.
+
+## Educational Mode
+
+The security compliance CLI includes an educational verbose mode that explains what each test does and why it's important for security:
+
+```bash
+# Basic verbose mode - shows test purposes
+security-compliance-cli --host <BOARD_IP_ADDRESS> --user fio test -v
+
+# Maximum verbosity - includes test categories and detailed explanations
+security-compliance-cli --host <BOARD_IP_ADDRESS> --user fio test -vv
+```
+
+This helps users understand security testing concepts and learn about embedded system security.
 
 ## Key Information
 

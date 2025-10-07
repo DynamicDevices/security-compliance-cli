@@ -99,6 +99,38 @@ The Security Compliance CLI is a comprehensive Rust-based testing framework desi
 - Network Hardening Applied
 - Filesystem Hardening Applied
 
+## Recent Major Improvements (v0.3.0)
+
+### 🎓 Educational Verbose Mode
+- **Added comprehensive verbose output** with `-v` and `-vv` flags
+- **Enhanced all 65 test descriptions** with detailed explanations
+- **Educational focus**: Helps users understand security concepts and requirements
+- **Two verbosity levels**: `-v` shows test purposes, `-vv` adds category information
+
+### 🔧 Enhanced i.MX93 Support
+- **Improved secure boot detection** for EdgeLock Enclave systems
+- **Fixed kernel signature verification** to properly detect hardware-based verification
+- **Enhanced boot chain analysis** recognizing ELE, U-Boot FIT, and factory signing
+- **Better hardware security detection** for CAAM and hardware RNG
+
+### 🛠️ System Information Enhancements
+- **Added comprehensive OS release parsing** from /etc/os-release
+- **Enhanced system info display** with Foundries.io LMP details
+- **Added Foundries registration status** and WireGuard VPN detection
+- **Improved target system identification** in all output formats
+
+### 📊 Test Framework Improvements
+- **Added runtime_008**: Read-Only Filesystem Protection test
+- **Enhanced test execution** with better error handling
+- **Improved test categorization** and filtering
+- **Better async trait compatibility** with enum-based design
+
+### 🔍 Security Posture Analysis
+- **Current test results**: 65 tests with improved success rates
+- **Enhanced compliance checking** for CRA and RED requirements
+- **Better hardware security validation** for i.MX93 features
+- **Improved production readiness assessment**
+
 ## Testing Modes
 
 ### Pre-Production Mode
@@ -217,18 +249,26 @@ The Security Compliance CLI is a comprehensive Rust-based testing framework desi
 ## Current Implementation Status
 
 ### ✅ Fully Implemented Features
-- **Core CLI Interface**: Complete with all command-line options
+- **Core CLI Interface**: Complete with all command-line options and verbose mode
+- **Educational Verbose Mode**: Two verbosity levels (-v, -vv) with detailed test explanations
 - **Test Framework**: Async execution with comprehensive result reporting
-- **Target Management**: SSH-based remote device communication
+- **Target Management**: SSH-based remote device communication with key authentication
 - **Configuration Management**: TOML-based configuration with CLI overrides
-- **All Test Categories**: 64 tests across 8 security domains
+- **All Test Categories**: 65 tests across 8 security domains
 - **Testing Modes**: Pre-production and production mode support
 - **Multiple Output Formats**: Human, JSON, JUnit XML, and Markdown
 - **Cross-compilation**: ARM64 build and deployment scripts
+- **Enhanced i.MX93 Support**: Improved ELE detection and hardware security tests
+
+### 🎓 Educational Features
+- **Verbose Mode**: Explains what each test does and why it's important
+- **Test Descriptions**: Comprehensive explanations of security concepts
+- **Learning-Oriented Output**: Helps users understand security testing principles
+- **Security Concept Education**: Each test includes educational context
 
 ### 📊 Test Coverage Summary
 - **Boot Security**: 7 tests (AHAB, U-Boot, kernel signing, etc.)
-- **Runtime Security**: 7 tests (LUKS, firewall, SELinux, etc.)
+- **Runtime Security**: 8 tests (LUKS, firewall, SELinux, read-only filesystem, etc.)
 - **Hardware Security**: 5 tests (EdgeLock Enclave, crypto acceleration, etc.)
 - **Network Security**: 5 tests (port analysis, WiFi/Bluetooth security, etc.)
 - **Compliance Testing**: 5 tests (CRA, RED requirements, etc.)
@@ -236,7 +276,7 @@ The Security Compliance CLI is a comprehensive Rust-based testing framework desi
 - **Certificate Management**: 10 tests (PKI, X.509, TLS validation, etc.)
 - **Production Hardening**: 10 tests (debug disabled, monitoring, etc.)
 
-**Total: 64 comprehensive security tests**
+**Total: 65 comprehensive security tests**
 
 ### 🔮 Future Enhancements
 - Time synchronization security tests
@@ -266,7 +306,8 @@ The Security Compliance CLI is a comprehensive Rust-based testing framework desi
 ---
 
 **Last Updated**: October 7, 2025  
-**Version**: 0.2.0  
-**Target Platform**: imx93-jaguar-eink / Foundries.io LmP  
+**Version**: 0.3.0  
+**Target Platform**: imx93-jaguar-eink / Foundries.io LmP v4.0.20-2156-94  
 **Compliance Standards**: UK CE RED, EU CRA  
-**Test Count**: 64 tests across 8 categories
+**Test Count**: 65 tests across 8 categories  
+**Major Features**: Educational verbose mode, enhanced i.MX93 support, comprehensive security testing
