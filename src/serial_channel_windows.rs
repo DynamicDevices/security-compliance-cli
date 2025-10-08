@@ -10,14 +10,14 @@ use crate::{
 };
 use async_trait::async_trait;
 use bytes::BytesMut;
-use serialport::{SerialPort, SerialPortBuilder};
+use serialport::SerialPort;
 use std::{
     io::{Read, Write},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 use tokio::time::sleep;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Windows-compatible serial channel implementation using serialport crate
 pub struct WindowsSerialChannel {
@@ -207,7 +207,8 @@ impl WindowsSerialChannel {
                 .map_err(|e| Error::SerialConnection(format!("Failed to send Ctrl-C: {}", e)))?;
 
             // Send multiple line endings to wake up the device
-            for line_ending in &[b"\r\n", b"\n", b"\r"] {
+            let line_endings: &[&[u8]] = &[b"\r\n", b"\n", b"\r"];
+            for line_ending in line_endings {
                 port_guard.write_all(line_ending).map_err(|e| {
                     Error::SerialConnection(format!("Failed to send line ending: {}", e))
                 })?;
@@ -320,7 +321,7 @@ impl CommunicationChannel for WindowsSerialChannel {
             device, baud_rate
         );
 
-        let port = SerialPortBuilder::new(device, baud_rate)
+        let port = serialport::new(device, baud_rate)
             .timeout(Duration::from_millis(timeout as u64))
             .data_bits(serialport::DataBits::Eight)
             .parity(serialport::Parity::None)
