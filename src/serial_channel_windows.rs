@@ -192,7 +192,13 @@ impl WindowsSerialChannel {
         let (_, _, timeout, login_prompt, password_prompt, shell_prompt, username, password) =
             self.get_config()?;
 
+        // Clone the values to avoid borrow checker issues
         let timeout_duration = Duration::from_secs(timeout as u64);
+        let login_prompt = login_prompt.clone();
+        let password_prompt = password_prompt.clone();
+        let shell_prompt = shell_prompt.clone();
+        let username = username.clone();
+        let password = password.clone();
 
         // Send some wake-up sequences
         debug!("Sending wake-up sequences");
@@ -235,7 +241,7 @@ impl WindowsSerialChannel {
         }
 
         // Handle login if prompts are configured
-        if let (Some(login_prompt), Some(username)) = (login_prompt, username) {
+        if let (Some(login_prompt), Some(username)) = (login_prompt.as_ref(), username.as_ref()) {
             debug!("Attempting login sequence");
 
             // Wait for login prompt
@@ -245,13 +251,15 @@ impl WindowsSerialChannel {
             self.send_command(username)?;
 
             // Handle password if configured
-            if let (Some(password_prompt), Some(password)) = (password_prompt, password) {
+            if let (Some(password_prompt), Some(password)) =
+                (password_prompt.as_ref(), password.as_ref())
+            {
                 self.wait_for_prompt(password_prompt, timeout_duration)?;
                 self.send_command(password)?;
             }
 
             // Wait for shell prompt
-            if let Some(shell_prompt) = shell_prompt {
+            if let Some(shell_prompt) = shell_prompt.as_ref() {
                 self.wait_for_prompt(shell_prompt, timeout_duration)?;
             } else {
                 // Wait for common shell prompts
