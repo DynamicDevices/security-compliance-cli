@@ -6,6 +6,8 @@
 
 #[cfg(not(target_os = "windows"))]
 use crate::serial_channel::SerialChannel;
+#[cfg(target_os = "windows")]
+use crate::serial_channel_windows::WindowsSerialChannel;
 use crate::{
     communication::{ChannelConfig, CommunicationChannel},
     config::CommunicationConfig,
@@ -49,11 +51,18 @@ impl Target {
                 })?)
             }
             #[cfg(target_os = "windows")]
-            ChannelConfig::Serial { .. } => {
-                return Err(Error::Unsupported(
-                    "Serial communication is not supported on Windows due to thread safety limitations. Please use SSH instead.".to_string()
-                ));
-            }
+            ChannelConfig::Serial { .. } => Box::new(WindowsSerialChannel::from_channel_config(
+                ChannelConfig::Serial {
+                    device: config.serial_device.clone().unwrap_or_default(),
+                    baud_rate: config.baud_rate.unwrap_or(115200),
+                    timeout: config.timeout as u32,
+                    login_prompt: config.serial_login_prompt.clone(),
+                    password_prompt: config.serial_password_prompt.clone(),
+                    shell_prompt: config.serial_shell_prompt.clone(),
+                    username: config.serial_username.clone(),
+                    password: config.serial_password.clone(),
+                },
+            )?),
         };
 
         Ok(Self { channel, config })

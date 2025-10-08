@@ -29,6 +29,8 @@ pub mod output;
 pub mod runner;
 #[cfg(not(target_os = "windows"))]
 pub mod serial_channel;
+#[cfg(target_os = "windows")]
+pub mod serial_channel_windows;
 pub mod ssh_channel;
 pub mod ssh_key;
 pub mod target;

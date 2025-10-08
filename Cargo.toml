@@ -30,6 +30,7 @@ async-trait = "0.1"
 toml = "0.8"
 printpdf = "0.7"
 tokio-serial = "5.4"
+serialport = "4.2"
 bytes = "1.5"
 ed25519-dalek = { version = "2.0", features = ["rand_core"] }
 rand = "0.8"

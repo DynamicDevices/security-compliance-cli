@@ -39,7 +39,7 @@ A comprehensive security compliance testing tool for embedded Linux systems, wit
 
 🚀 **Easy Integration**
 - SSH-based remote testing (Linux, macOS, Windows)
-- Serial console communication (Linux, macOS)
+- Serial console communication (Linux, macOS, Windows)
 - SSH key management (generate, install, verify, remove)
 - Machine auto-detection (i.MX93 E-Ink, i.MX8MM Sentai)
 - Configurable test suites with platform filtering
@@ -68,8 +68,12 @@ The tool supports both SSH and serial console communication:
 
 #### SSH Setup (Recommended)
 ```bash
-# Install SSH key via serial console (Linux/macOS)
+# Install SSH key via serial console (All platforms)
+# Linux/macOS
 security-compliance-cli --serial-device /dev/ttyUSB0 install-ssh-key --key-validity-hours 2
+
+# Windows
+security-compliance-cli --serial-device COM3 install-ssh-key --key-validity-hours 2
 
 # Or manually configure SSH access
 ssh-copy-id fio@192.168.0.36
@@ -77,11 +81,12 @@ ssh-copy-id fio@192.168.0.36
 
 #### Serial Console Setup
 ```bash
-# Direct serial communication (Linux/macOS only)
+# Direct serial communication (All platforms)
+# Linux/macOS
 security-compliance-cli --serial-device /dev/ttyUSB0 --serial-username fio test
 
-# Windows users should use SSH instead
-security-compliance-cli --host 192.168.0.36 --user fio test
+# Windows
+security-compliance-cli --serial-device COM3 --serial-username fio test
 ```
 
 See [docs/SSH_KEY_INSTALLATION.md](docs/SSH_KEY_INSTALLATION.md) for detailed SSH key management and [docs/SERIAL_SETUP.md](docs/SERIAL_SETUP.md) for serial console configuration.
@@ -490,12 +495,12 @@ impl SecurityTest for MyTests {
 - **Operating System**: Foundries.io Linux Micro Platform v95+
 - **Network**: SSH access (port 22) or Serial console
 - **Memory**: 512MB RAM minimum, 1GB storage
-- **Serial**: USB-to-serial adapter for console access (Linux/macOS)
+- **Serial**: USB-to-serial adapter for console access (Windows, Linux, macOS)
 
 ### Host Platform Support
 - **Linux**: Full functionality (SSH + Serial)
 - **macOS**: Full functionality (SSH + Serial)
-- **Windows**: SSH only (Serial not supported due to thread safety)
+- **Windows**: Full functionality (SSH + Serial)
 
 ## Security Features Tested
 
@@ -572,10 +577,14 @@ security-compliance-cli --serial-device /dev/ttyUSB0 --baud-rate 9600 test
 
 **Windows Serial Support**:
 ```bash
-# Windows users should use SSH instead of serial
+# Windows now supports serial communication directly
+security-compliance-cli --serial-device COM3 --serial-username fio test
+
+# SSH remains available as an alternative
 security-compliance-cli --host 192.168.0.36 --user fio test
 
-# SSH key management on Windows requires WSL or third-party tools
+# SSH key management works natively on Windows
+security-compliance-cli --serial-device COM3 install-ssh-key --key-validity-hours 2
 ```
 
 **Test Timeouts**:

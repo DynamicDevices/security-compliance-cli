@@ -1,14 +1,25 @@
 # Serial Communication Setup
 
-The Security Compliance CLI now supports serial communication for testing embedded devices that don't have network connectivity.
+The Security Compliance CLI supports serial communication for testing embedded devices that don't have network connectivity. **Serial communication is now fully supported on Windows, Linux, and macOS.**
+
+## Platform Support
+
+| Platform | Status | Implementation |
+|----------|---------|----------------|
+| **Linux** | ✅ Full Support | `tokio-serial` (async) |
+| **Windows** | ✅ Full Support | `serialport-rs` (thread-safe) |
+| **macOS** | ✅ Full Support | `tokio-serial` (async) |
 
 ## Quick Start
 
 ### Command Line Usage
 
 ```bash
-# Basic serial connection
+# Basic serial connection (Linux/macOS)
 ./security-compliance-cli --serial-device /dev/ttyUSB1 test
+
+# Basic serial connection (Windows)
+./security-compliance-cli --serial-device COM3 test
 
 # Serial with custom settings
 ./security-compliance-cli \
@@ -19,7 +30,7 @@ The Security Compliance CLI now supports serial communication for testing embedd
   --serial-password mypassword \
   test --test-suite hardware
 
-# Serial with custom prompts
+# Windows example with custom prompts
 ./security-compliance-cli \
   --serial-device COM3 \
   --serial-shell-prompt "$ " \
@@ -35,7 +46,10 @@ Create a `serial-config.toml` file:
 ```toml
 [communication]
 channel_type = "serial"
+# Linux/macOS
 serial_device = "/dev/ttyUSB1"
+# Windows (uncomment the line below instead)
+# serial_device = "COM3"
 baud_rate = 115200
 timeout = 10
 serial_username = "root"
@@ -85,8 +99,21 @@ Then run:
    ```
 
 ### Windows
-1. Check Device Manager for COM port numbers
-2. Use the COM port (e.g., `COM3`, `COM4`) as the device path
+1. **Check Device Manager** for COM port numbers:
+   - Press `Win + X` and select "Device Manager"
+   - Expand "Ports (COM & LPT)" section
+   - Note the COM port number (e.g., `COM3`, `COM4`)
+2. **Use the COM port** (e.g., `COM3`, `COM4`) as the device path
+3. **No additional permissions** required - Windows handles COM port access automatically
+
+**Windows Examples:**
+```bash
+# Windows PowerShell/Command Prompt
+.\security-compliance-cli.exe --serial-device COM3 test
+
+# Windows with custom baud rate
+.\security-compliance-cli.exe --serial-device COM4 --baud-rate 9600 test
+```
 
 ### macOS
 1. Check available devices:
