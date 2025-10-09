@@ -287,9 +287,15 @@ impl RuntimeSecurityTests {
         // Check if SELinux filesystem is mounted
         let _selinux_fs = target.execute_command("mount | grep selinux").await?;
 
+        // Check for alternative LSM modules
+        let lsm_modules = target
+            .execute_command("cat /sys/kernel/security/lsm 2>/dev/null || echo 'lsm_not_available'")
+            .await?;
+
         let mut details = Vec::new();
         details.push(format!("SELinux status: {}", selinux_status.stdout.trim()));
         details.push(format!("SELinux config: {}", selinux_config.stdout));
+        details.push(format!("Active LSM modules: {}", lsm_modules.stdout.trim()));
 
         match selinux_status.stdout.trim() {
             "Enforcing" => Ok((
@@ -307,11 +313,42 @@ impl RuntimeSecurityTests {
                 "SELinux is disabled - security policy not enforced".to_string(),
                 Some(details.join("\n")),
             )),
-            "not_available" => Ok((
-                TestStatus::Failed,
-                "SELinux not available on this system - install SELinux support".to_string(),
-                None,
-            )),
+            "not_available" => {
+                // Check for alternative security modules
+                if !lsm_modules.stdout.contains("lsm_not_available") {
+                    let active_lsms = lsm_modules.stdout.trim();
+                    if active_lsms.contains("landlock")
+                        || active_lsms.contains("apparmor")
+                        || active_lsms.contains("smack")
+                        || active_lsms.contains("tomoyo")
+                    {
+                        Ok((
+                            TestStatus::Passed,
+                            format!("Alternative LSM security active: {}", active_lsms),
+                            Some(details.join("\n")),
+                        ))
+                    } else if active_lsms.contains("capability") {
+                        Ok((
+                            TestStatus::Warning,
+                            format!("Basic LSM security active: {}", active_lsms),
+                            Some(details.join("\n")),
+                        ))
+                    } else {
+                        Ok((
+                            TestStatus::Failed,
+                            "No mandatory access control system detected".to_string(),
+                            Some(details.join("\n")),
+                        ))
+                    }
+                } else {
+                    Ok((
+                        TestStatus::Failed,
+                        "SELinux not available and cannot check alternative LSM modules"
+                            .to_string(),
+                        None,
+                    ))
+                }
+            }
             _ => Ok((
                 TestStatus::Warning,
                 "SELinux status unknown".to_string(),

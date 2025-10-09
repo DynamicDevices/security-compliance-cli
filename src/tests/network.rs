@@ -109,7 +109,18 @@ impl NetworkSecurityTests {
         let mut open_risky = Vec::new();
 
         for port in &risky_ports {
-            if netstat.stdout.contains(&format!(":{}", port)) {
+            // Use word boundaries to avoid false positives (e.g., :53 matching :5355)
+            let port_patterns = [
+                format!(":{} ", port),  // Port followed by space
+                format!(":{}:", port),  // Port between colons (IPv6)
+                format!(":{}\t", port), // Port followed by tab
+                format!(":{}\n", port), // Port at end of line
+            ];
+
+            if port_patterns
+                .iter()
+                .any(|pattern| netstat.stdout.contains(pattern))
+            {
                 open_risky.push(*port);
             }
         }
