@@ -158,19 +158,40 @@ impl BootSecurityTests {
                     "💡 For better security testing, run as root or configure passwordless sudo."
                 );
 
-                // Try with sudo - we'll need to handle password if required
-                let sudo_command = format!("sudo {}", command);
-                let sudo_result = target.execute_command(&sudo_command).await?;
+                // Try with sudo using password input - we'll try common embedded passwords
+                let common_passwords = ["fio"]; // Focus on the most likely password first
 
-                if sudo_result.exit_code != 0 && sudo_result.stderr.contains("password is required")
-                {
-                    warn!("⚠️  Sudo password required but not available in automated testing");
-                    warn!(
-                        "💡 Configure passwordless sudo or run tests as root for complete analysis"
+                for password in &common_passwords {
+                    debug!(
+                        "Trying sudo with password authentication: {}",
+                        if password.is_empty() {
+                            "passwordless"
+                        } else {
+                            "with password"
+                        }
                     );
+                    let sudo_command = if password.is_empty() {
+                        format!("sudo -n {}", command)
+                    } else {
+                        format!("echo '{}' | sudo -S {}", password, command)
+                    };
+
+                    let sudo_result = target.execute_command(&sudo_command).await?;
+
+                    if sudo_result.exit_code == 0 {
+                        debug!("Sudo command succeeded with password authentication");
+                        return Ok(sudo_result);
+                    } else {
+                        debug!(
+                            "Sudo attempt failed with exit code: {}",
+                            sudo_result.exit_code
+                        );
+                    }
                 }
 
-                Ok(sudo_result)
+                warn!("⚠️  Sudo password required but not available in automated testing");
+                warn!("💡 Configure passwordless sudo or run tests as root for complete analysis");
+                Ok(result) // Return original result if sudo fails
             } else {
                 warn!("⚠️  Kernel access denied and no sudo privileges available");
                 warn!("💡 Some boot security tests may be incomplete without elevated privileges");
