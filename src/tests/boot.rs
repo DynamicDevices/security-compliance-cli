@@ -173,7 +173,7 @@ impl BootSecurityTests {
                     let sudo_command = if password.is_empty() {
                         format!("sudo -n {}", command)
                     } else {
-                        format!("echo '{}' | sudo -S {}", password, command)
+                        format!("echo '{}' | sudo -S {} 2>/dev/null", password, command)
                     };
 
                     let sudo_result = target.execute_command(&sudo_command).await?;
@@ -670,7 +670,10 @@ impl BootSecurityTests {
 
         // Check for ELE which may handle secure world on i.MX93
         let ele_secure_world = self
-            .execute_kernel_command(target, "dmesg | grep -i 'fsl-ele-mu\\|ele.*secure'")
+            .execute_kernel_command(
+                target,
+                "dmesg | grep -i 'ele-reserved\\|fsl-ele-mu\\|ele.*secure'",
+            )
             .await?;
 
         let mut details = Vec::new();
@@ -731,8 +734,10 @@ impl BootSecurityTests {
         }
         // i.MX93 may use ELE for secure world instead of traditional TF-A
         else if !ele_secure_world.stdout.is_empty()
-            && ele_secure_world.stdout.contains("fsl-ele-mu")
+            && (ele_secure_world.stdout.contains("ele-reserved")
+                || ele_secure_world.stdout.contains("fsl-ele-mu"))
         {
+            debug!("ELE detected: stdout='{}'", ele_secure_world.stdout.trim());
             Ok((
                 TestStatus::Passed,
                 "i.MX93 EdgeLock Enclave provides secure world functionality (alternative to TF-A)"
@@ -744,6 +749,12 @@ impl BootSecurityTests {
         else if !smc_check.stdout.is_empty()
             && (smc_check.stdout.contains("psci") || smc_check.stdout.contains("smc"))
         {
+            debug!(
+                "PSCI/SMC detected: stdout='{}', contains_psci={}, contains_smc={}",
+                smc_check.stdout.trim(),
+                smc_check.stdout.contains("psci"),
+                smc_check.stdout.contains("smc")
+            );
             Ok((
                 TestStatus::Warning,
                 "PSCI/SMC secure monitor detected but implementation unclear".to_string(),
