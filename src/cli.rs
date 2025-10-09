@@ -250,8 +250,8 @@ pub enum Commands {
         /// 💾 Save generated private key to file
         ///
         /// Path to save the generated private key for later use.
-        /// If not specified, key is only stored temporarily.
-        #[arg(long)]
+        /// Defaults to 'test_device_key' in current directory.
+        #[arg(long, default_value = "test_device_key")]
         save_private_key: Option<PathBuf>,
 
         /// 🧪 Test SSH connection after key installation
