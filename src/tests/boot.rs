@@ -5,6 +5,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use std::time::Instant;
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone)]
 pub enum BootSecurityTests {
@@ -98,6 +99,87 @@ impl SecurityTest for BootSecurityTests {
 }
 
 impl BootSecurityTests {
+    /// Check if the current user has sudo access
+    async fn check_sudo_access(&self, target: &mut Target) -> Result<bool> {
+        debug!("Checking sudo access for privileged boot tests");
+
+        // Try a simple sudo command that doesn't require password input
+        let result = target.execute_command("sudo -n true 2>/dev/null").await;
+
+        match result {
+            Ok(cmd_result) => {
+                if cmd_result.exit_code == 0 {
+                    debug!("Passwordless sudo access available");
+                    Ok(true)
+                } else {
+                    debug!("No passwordless sudo access, checking if sudo is available");
+                    // Check if user is in sudo group or has sudo access with password
+                    let groups_result = target.execute_command("groups").await?;
+                    let has_sudo_group = groups_result.stdout.contains("sudo")
+                        || groups_result.stdout.contains("wheel");
+
+                    if has_sudo_group {
+                        debug!("User is in sudo group but password required");
+                        Ok(true)
+                    } else {
+                        debug!("User does not have sudo access");
+                        Ok(false)
+                    }
+                }
+            }
+            Err(_) => {
+                debug!("Could not check sudo access");
+                Ok(false)
+            }
+        }
+    }
+
+    /// Execute a command that requires kernel access, trying sudo if needed
+    async fn execute_kernel_command(
+        &self,
+        target: &mut Target,
+        command: &str,
+    ) -> Result<crate::target::CommandResult> {
+        debug!("Executing kernel command: {}", command);
+
+        // First try the command without sudo
+        let result = target.execute_command(command).await?;
+
+        // If it fails with permission denied, try with sudo
+        if result.exit_code != 0
+            && (result.stderr.contains("Operation not permitted")
+                || result.stderr.contains("Permission denied"))
+        {
+            debug!("Command failed with permission error, checking sudo access");
+
+            if self.check_sudo_access(target).await? {
+                warn!("⚠️  Elevated privileges required for kernel access. Using sudo for boot security tests.");
+                warn!(
+                    "💡 For better security testing, run as root or configure passwordless sudo."
+                );
+
+                // Try with sudo - we'll need to handle password if required
+                let sudo_command = format!("sudo {}", command);
+                let sudo_result = target.execute_command(&sudo_command).await?;
+
+                if sudo_result.exit_code != 0 && sudo_result.stderr.contains("password is required")
+                {
+                    warn!("⚠️  Sudo password required but not available in automated testing");
+                    warn!(
+                        "💡 Configure passwordless sudo or run tests as root for complete analysis"
+                    );
+                }
+
+                Ok(sudo_result)
+            } else {
+                warn!("⚠️  Kernel access denied and no sudo privileges available");
+                warn!("💡 Some boot security tests may be incomplete without elevated privileges");
+                Ok(result)
+            }
+        } else {
+            Ok(result)
+        }
+    }
     async fn test_secure_boot_enabled(
         &self,
         target: &mut Target,
@@ -421,9 +503,10 @@ impl BootSecurityTests {
             .execute_command("cat /proc/sys/kernel/modules_disabled 2>/dev/null || echo '0'")
             .await?;
 
-        // Check for module signature verification in dmesg
-        let module_sig = target
-            .execute_command(
+        // Check for module signature verification in dmesg (requires elevated privileges)
+        let module_sig = self
+            .execute_kernel_command(
+                target,
                 "dmesg | grep -i 'module.*sign\\|x509.*cert\\|Factory kernel module signing key'",
             )
             .await?;
@@ -546,24 +629,27 @@ impl BootSecurityTests {
         &self,
         target: &mut Target,
     ) -> Result<(TestStatus, String, Option<String>)> {
-        // Check for TF-A (ARM Trusted Firmware) in boot log
-        let tfa_check = target
-            .execute_command("dmesg | grep -i 'tf-a\\|trusted.*firmware\\|bl31'")
+        // Check for TF-A (ARM Trusted Firmware) in boot log (requires elevated privileges)
+        let tfa_check = self
+            .execute_kernel_command(target, "dmesg | grep -i 'tf-a\\|trusted.*firmware\\|bl31'")
             .await?;
 
         // Check for ARM SMC calls which indicate secure monitor presence
-        let smc_check = target
-            .execute_command("dmesg | grep -i 'smc\\|psci\\|arm.*smc' | head -3")
+        let smc_check = self
+            .execute_kernel_command(target, "dmesg | grep -i 'smc\\|psci\\|arm.*smc' | head -3")
             .await?;
 
         // Check for i.MX93 specific secure monitor (may use different implementation)
-        let imx_secure = target
-            .execute_command("dmesg | grep -i 'imx.*secure\\|secure.*monitor\\|el3\\|ree.*tee'")
+        let imx_secure = self
+            .execute_kernel_command(
+                target,
+                "dmesg | grep -i 'imx.*secure\\|secure.*monitor\\|el3\\|ree.*tee'",
+            )
             .await?;
 
         // Check for ELE which may handle secure world on i.MX93
-        let ele_secure_world = target
-            .execute_command("dmesg | grep -i 'fsl-ele-mu\\|ele.*secure'")
+        let ele_secure_world = self
+            .execute_kernel_command(target, "dmesg | grep -i 'fsl-ele-mu\\|ele.*secure'")
             .await?;
 
         let mut details = Vec::new();
