@@ -239,8 +239,8 @@ impl BootSecurityTests {
         }
 
         // Check for EdgeLock Enclave (ELE) on i.MX93 - primary secure boot mechanism
-        let ele_check = target
-            .execute_command("dmesg | grep -i 'fsl-ele-mu\\|ele-trng\\|EdgeLock'")
+        let ele_check = self
+            .execute_kernel_command(target, "dmesg | grep -i 'fsl-ele-mu\\|ele-trng\\|EdgeLock'")
             .await?;
         if ele_check.stdout.contains("fsl-ele-mu")
             && ele_check.stdout.contains("Successfully registered")
@@ -262,8 +262,8 @@ impl BootSecurityTests {
         }
 
         // Check for Factory kernel module signing (indicates secure boot chain)
-        let factory_key = target
-            .execute_command("dmesg | grep 'Factory kernel module signing key'")
+        let factory_key = self
+            .execute_kernel_command(target, "dmesg | grep 'Factory kernel module signing key'")
             .await?;
         if !factory_key.stdout.is_empty() {
             secure_indicators.push("Factory module signing key loaded");
@@ -415,8 +415,8 @@ impl BootSecurityTests {
         let mut kernel_verification_indicators = Vec::new();
 
         // Check for kernel signature verification in dmesg
-        let kernel_sig = target
-            .execute_command("dmesg | grep -i 'kernel.*sign\\|vmlinuz.*verif'")
+        let kernel_sig = self
+            .execute_kernel_command(target, "dmesg | grep -i 'kernel.*sign\\|vmlinuz.*verif'")
             .await?;
         if !kernel_sig.stdout.is_empty() {
             kernel_verification_indicators.push("Direct kernel signature verification");
@@ -429,14 +429,23 @@ impl BootSecurityTests {
                 "cat /sys/kernel/security/lockdown 2>/dev/null || echo 'not_available'",
             )
             .await?;
-        if lockdown.stdout.contains("integrity") || lockdown.stdout.contains("confidentiality") {
+        if lockdown.stdout.contains("[integrity]") || lockdown.stdout.contains("[confidentiality]")
+        {
             kernel_verification_indicators.push("Kernel lockdown mode active");
             details.push(format!("Lockdown: {}", lockdown.stdout.trim()));
+        } else if lockdown.stdout.contains("integrity")
+            || lockdown.stdout.contains("confidentiality")
+        {
+            // Lockdown available but not active
+            details.push(format!(
+                "Lockdown available but not active: {}",
+                lockdown.stdout.trim()
+            ));
         }
 
         // For i.MX93 systems: Check if ELE-based secure boot is handling kernel verification
-        let ele_secure_boot = target
-            .execute_command("dmesg | grep -i 'ele\\|edgelock\\|ahab\\|hab'")
+        let ele_secure_boot = self
+            .execute_kernel_command(target, "dmesg | grep -i 'ele\\|edgelock\\|ahab\\|hab'")
             .await?;
         if !ele_secure_boot.stdout.is_empty() {
             kernel_verification_indicators.push("Hardware-based secure boot (ELE/AHAB)");
