@@ -170,13 +170,38 @@ impl SshKeyInstaller {
         let actual_user = if self.target_user == "root" {
             match channel.execute_command("whoami").await {
                 Ok(result) if result.exit_code == 0 => {
-                    let detected_user = result.stdout.trim().lines().last().unwrap_or("").trim();
-                    if !detected_user.is_empty()
-                        && detected_user != "root"
-                        && !detected_user.contains('@')
-                    {
-                        info!("Detected current user: {}, installing key for this user instead of root", detected_user);
-                        detected_user.to_string()
+                    // Parse whoami output - look for a line that's just a username (no prompt or @)
+                    let mut detected_user = None;
+                    for line in result.stdout.trim().lines() {
+                        let line = line.trim();
+                        // Skip the command echo and prompts
+                        if line == "whoami"
+                            || line.is_empty()
+                            || line.contains('@')
+                            || line.contains('$')
+                            || line.contains('#')
+                        {
+                            continue;
+                        }
+                        // Found a clean username
+                        if !line.is_empty()
+                            && line
+                                .chars()
+                                .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+                        {
+                            detected_user = Some(line.to_string());
+                            break;
+                        }
+                    }
+
+                    if let Some(user) = detected_user {
+                        if user != "root" {
+                            info!("Detected current user: {}, installing key for this user instead of root", user);
+                            user
+                        } else {
+                            info!("Current user is root, using root");
+                            self.target_user.clone()
+                        }
                     } else {
                         info!("Could not parse user from whoami output: {:?}, using configured target: {}", result.stdout, self.target_user);
                         self.target_user.clone()
@@ -262,6 +287,35 @@ impl SshKeyInstaller {
         let result = channel.execute_command(&chown_command).await?;
         if result.exit_code != 0 {
             warn!("Failed to set ownership: {}", result.stderr);
+        }
+
+        // Verify the key was installed correctly by reading back the authorized_keys file
+        info!("Verifying SSH key installation...");
+        let verify_command = format!("cat {}", authorized_keys_path);
+        let result = channel.execute_command(&verify_command).await?;
+
+        if result.exit_code != 0 {
+            return Err(Error::Communication(format!(
+                "Failed to verify key installation - cannot read authorized_keys: {}",
+                result.stderr
+            )));
+        }
+
+        // Check if our public key is present in the file
+        let public_key_content = public_key.trim();
+        if result.stdout.contains(public_key_content) {
+            info!(
+                "🔑 Key found in authorized_keys file for user: {}",
+                actual_user
+            );
+            debug!("SSH key installation verified successfully!");
+        } else {
+            warn!("⚠️  SSH key may not have been installed correctly");
+            warn!("Expected key: {}", public_key_content);
+            warn!("Authorized keys content: {}", result.stdout.trim());
+            return Err(Error::Communication(
+                "SSH key verification failed - key not found in authorized_keys".to_string(),
+            ));
         }
 
         info!(
@@ -580,6 +634,9 @@ impl SshKeyInstaller {
                 warn!("Key was installed but connection test failed - you may need to check SSH server configuration");
             }
         }
+
+        // Final success message after all steps completed
+        info!("✅ SSH key installation workflow completed successfully!");
 
         Ok(key_pair)
     }

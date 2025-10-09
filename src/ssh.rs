@@ -79,13 +79,17 @@ impl SshClient {
             if self.try_key_file(session, key_path)? {
                 return Ok(true);
             }
+            // If specific key fails, don't try others to avoid "too many authentication failures"
+            debug!("Specific key failed, not trying additional keys to avoid authentication failures");
+            return Ok(false);
         }
 
-        // Try default key locations
+        // Try default key locations, including our test key
         let home_dir = std::env::var("HOME").unwrap_or_else(|_| "/home/user".to_string());
         let default_keys = [
-            format!("{}/.ssh/test_ed25519", home_dir), // Our test key
-            format!("{}/.ssh/id_ed25519", home_dir),
+            "test_device_key".to_string(), // Our generated test key in current directory
+            format!("{}/.ssh/test_device_key", home_dir), // Test key in SSH directory  
+            format!("{}/.ssh/id_ed25519", home_dir), // Prefer Ed25519 over RSA
             format!("{}/.ssh/id_rsa", home_dir),
             format!("{}/.ssh/id_ecdsa", home_dir),
         ];

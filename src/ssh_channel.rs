@@ -65,13 +65,16 @@ impl SshChannel {
 
     fn try_key_auth(&self, session: &Session) -> Result<bool> {
         let key_paths = if let Some(key_path) = &self.config.ssh_key_path {
+            // If a specific key is provided, only try that key to avoid "too many authentication failures"
             vec![key_path.clone()]
         } else {
-            // Try common SSH key locations
+            // Try common SSH key locations, including our test key
             let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
             vec![
+                "test_device_key".to_string(), // Our generated test key in current directory
+                format!("{}/.ssh/test_device_key", home), // Test key in SSH directory
+                format!("{}/.ssh/id_ed25519", home), // Prefer Ed25519 over RSA
                 format!("{}/.ssh/id_rsa", home),
-                format!("{}/.ssh/id_ed25519", home),
                 format!("{}/.ssh/id_ecdsa", home),
                 format!("{}/.ssh/id_dsa", home),
             ]
@@ -105,6 +108,13 @@ impl SshChannel {
                     }
                     Err(e) => {
                         debug!("SSH key authentication failed for {}: {}", key_path, e);
+
+                        // If we have a specific key path and it fails, don't try others
+                        // This prevents "too many authentication failures"
+                        if self.config.ssh_key_path.is_some() {
+                            debug!("Specific key failed, not trying additional keys to avoid authentication failures");
+                            break;
+                        }
                     }
                 }
             }
