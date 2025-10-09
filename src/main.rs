@@ -197,7 +197,7 @@ async fn main() -> Result<()> {
                     comm_channel,
                     public_key_file.as_deref(),
                     key_validity_hours,
-                    save_private_key.as_deref(),
+                    Some(save_private_key.as_path()),
                     host,
                     port,
                 )
@@ -215,29 +215,16 @@ async fn main() -> Result<()> {
 
                     if !key_pair.private_key.is_empty() {
                         info!("🔐 Generated key type: {}", key_pair.key_type);
-
-                        if save_private_key.is_none() {
-                            warn!("⚠️  Private key generated but not saved - you won't be able to use it after this session");
-                            warn!("💡 Use --save-private-key /path/to/key to save for later use");
-                        }
+                        // Key is always saved now with the new default behavior
                     }
 
                     info!("🌐 You can now connect via SSH using:");
-                    if let Some(key_file) = &save_private_key {
-                        info!(
-                            "   ssh -i {} {}@{}",
-                            key_file.display(),
-                            installer.target_user,
-                            host
-                        );
-                    } else if public_key_file.is_some() {
-                        info!(
-                            "   ssh -i <your_private_key> {}@{}",
-                            installer.target_user, host
-                        );
-                    } else {
-                        info!("   (Private key was not saved - connection not possible)");
-                    }
+                    info!(
+                        "   ssh -i {} {}@{}",
+                        save_private_key.display(),
+                        installer.target_user,
+                        host
+                    );
                 }
                 Err(e) => {
                     error!("❌ SSH key installation failed: {}", e);

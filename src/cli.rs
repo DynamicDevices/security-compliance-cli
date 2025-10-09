@@ -92,9 +92,9 @@ pub struct Cli {
 
     /// 📝 Text that shows when device is ready for commands
     ///
-    /// The command prompt (e.g., "# ", "$ ", "root@device:~# ").
+    /// The command prompt (e.g., "$ ", "# ", "root@device:~# ").
     /// Tool waits for this before running tests.
-    #[arg(long, default_value = "# ")]
+    #[arg(long, default_value = "$ ")]
     pub serial_shell_prompt: String,
 
     /// ⏱️ Connection timeout in seconds
@@ -250,9 +250,10 @@ pub enum Commands {
         /// 💾 Save generated private key to file
         ///
         /// Path to save the generated private key for later use.
-        /// Defaults to 'test_device_key' in current directory.
+        /// On Linux/macOS: defaults to ~/.ssh/test_device_key if ~/.ssh exists, otherwise test_device_key
+        /// On Windows: defaults to test_device_key in current directory
         #[arg(long, default_value = "test_device_key")]
-        save_private_key: Option<PathBuf>,
+        save_private_key: PathBuf,
 
         /// 🧪 Test SSH connection after key installation
         ///
